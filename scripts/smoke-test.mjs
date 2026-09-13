@@ -65,7 +65,7 @@ try {
   const reference = await page.locator(".reference").innerText();
   assert.match(reference, /^AQ-[A-F0-9]{8}$/);
   await page.screenshot({ path: "artifacts/aquifer-confirmation.png" });
-  ok(`Database-backed booking saved with reference ${reference}`);
+  ok(`Booking accepted with reference ${reference}`);
 
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download your request summary" }).click();
@@ -116,7 +116,7 @@ try {
   assert.deepEqual(errors, [], `Client errors: ${errors.join(", ")}`);
   const health = await page.request.get("/api/health");
   assert.equal(health.status(), 200);
-  ok("Privacy dialog, zero client errors, and healthy PostgreSQL connection");
+  ok("Privacy dialog, zero client errors, and healthy API");
   console.log(`\n${results.length} smoke checks passed.`);
 } finally {
   await browser.close();
