@@ -1,8 +1,7 @@
 @import "tailwindcss";
 
-@font-face { font-family: "DM Sans"; src: url("/fonts/dm-sans-regular.ttf") format("truetype"); font-style: normal; font-weight: 400 500; font-display: swap; }
-@font-face { font-family: "DM Sans"; src: url("/fonts/dm-sans-semibold.ttf") format("truetype"); font-style: normal; font-weight: 550 650; font-display: swap; }
-@font-face { font-family: "DM Sans"; src: url("/fonts/dm-sans-bold.ttf") format("truetype"); font-style: normal; font-weight: 700 900; font-display: swap; }
+/* DM Sans (variable, OFL 1.1) — serves every weight the design uses: 400, 550, 600, 650, 700, 750. */
+@font-face { font-family: "DM Sans"; src: url("/fonts/dm-sans.ttf") format("truetype"); font-style: normal; font-weight: 100 1000; font-display: swap; }
 
 :root { --paper: #f8f9f6; --ink: #172e38; --blue: #2465e8; --blue-dark: #1551ca; --muted: #6b777a; --line: #e0e5de; --navy: #112f3c; }
 * { box-sizing: border-box; }
