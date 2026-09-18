@@ -1,4 +1,3 @@
-import { LOGO_GROUPS, LOGO_VIEWBOX } from "@/lib/logo-mark";
 import type { ReactNode } from "react";
 
 export type IconName = "arrow-right" | "arrow-up-right" | "arrow-down" | "phone" | "check" | "shield" | "clock" | "droplet" | "menu" | "close" | "chevron-down" | "chevron-left" | "chevron-right" | "plus" | "minus" | "map-pin" | "calendar" | "sprout" | "home" | "wrench" | "message" | "ruler" | "file-check" | "lock" | "mail" | "star" | "download";
@@ -38,8 +37,11 @@ export function Icon({ name, size = 20, className = "" }: { name: IconName; size
 }
 
 export function BrandMark({ className = "" }: { className?: string }) {
-  // The company mark itself — same vector as the favicon, no background plate.
-  return <svg className={className} width="39" height="50" viewBox={LOGO_VIEWBOX} fill="none" aria-hidden="true">{LOGO_GROUPS.map((group) => <g key={group.fill} transform={group.transform} fill={group.fill}>{group.d.map((d) => <path key={d} d={d} />)}</g>)}</svg>;
+  // One file, two jobs: this is the favicon (src/app/icon.svg) rendered in the page, so
+  // the tab icon and the brand mark can never drift apart. next/image refuses SVG
+  // without dangerouslyAllowSVG, and a 1.5 kB mark needs no optimiser.
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img className={`brand-mark${className ? ` ${className}` : ""}`} src="/icon.svg" alt="" width={64} height={64} draggable={false} />;
 }
 
 export function Brand({ light = false }: { light?: boolean }) {

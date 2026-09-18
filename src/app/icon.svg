@@ -1,1 +1,28 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 198 256" width="198" height="256"><g transform="translate(0.000000,256.000000) scale(0.100000,-0.100000)" fill="#0d8bc4"><path d="M690 2545 c0 -25 -62 -154 -140 -290 -353 -617 -261 -1127 213 -1181 42 -5 57 -3 57 5 0 116 202 440 329 529 l48 34 -14 74 c-32 173 -125 369 -340 719 -20 33 -64 45 -88 25 -14 -12 -45 41 -45 76 0 7 -4 16 -10 19 -5 3 -10 -1 -10 -10z"/><path d="M1460 1701 c0 -20 47 -112 133 -259 221 -382 258 -712 111 -992 -198 -377 -806 -528 -1270 -316 -100 46 -62 13 56 -48 255 -132 739 -129 1003 6 273 140 408 373 408 703 0 226 -38 343 -207 637 -42 73 -86 155 -99 183 -31 70 -135 136 -135 86z"/><path d="M92 1163 c-10 -17 11 -58 85 -170 115 -174 313 -318 466 -339 l42 -5 -55 23 c-138 59 -282 194 -385 363 -87 142 -127 175 -153 128z"/></g><g transform="translate(0.000000,256.000000) scale(0.100000,-0.100000)" fill="#77b91c"><path d="M1344 1711 c-290 -114 -436 -305 -548 -721 -20 -74 -51 -182 -68 -239 l-32 -103 -46 5 c-213 25 -436 230 -587 539 -27 53 -50 97 -53 97 -29 5 15 -548 55 -699 96 -357 352 -533 800 -547 827 -26 1169 632 727 1399 -55 95 -110 201 -123 235 -28 72 -28 73 -125 34z"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="aqDrop" x1="12" y1="8" x2="38" y2="53" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5cc7f5"/>
+      <stop offset=".5" stop-color="#1586c9"/>
+      <stop offset="1" stop-color="#07527f"/>
+    </linearGradient>
+    <linearGradient id="aqLeaf" x1="49" y1="13" x2="10" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#c2ee45"/>
+      <stop offset=".46" stop-color="#7cc11f"/>
+      <stop offset="1" stop-color="#2c700d"/>
+    </linearGradient>
+    <radialGradient id="aqSheen" cx=".33" cy=".28" r=".6">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".5"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="aqShadow" x="-24%" y="-24%" width="148%" height="148%">
+      <feDropShadow dx="0" dy="1.1" stdDeviation="1.15" flood-color="#062338" flood-opacity=".34"/>
+    </filter>
+  </defs>
+  <g filter="url(#aqShadow)">
+    <path id="drop" d="M24 3C24 3 5 23 5 37c0 11 8.5 18 19 18s19-7 19-18C43 23 24 3 24 3Z" fill="url(#aqDrop)"/>
+    <use href="#drop" fill="url(#aqSheen)"/>
+    <path d="M10 58C6 40 20 19 49 13 57 35 44 57 10 58Z" fill="url(#aqLeaf)"/>
+  </g>
+  <path d="M10 58C6 40 20 19 49 13" fill="none" stroke="#ffffff" stroke-opacity=".32" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M15 24c-3 4.5-4 9-2 13" fill="none" stroke="#ffffff" stroke-opacity=".6" stroke-width="3.4" stroke-linecap="round"/>
+</svg>

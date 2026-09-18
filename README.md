@@ -2,7 +2,8 @@
 
 Single-page marketing site for a licensed Florida well drilling contractor, built with Next.js (App Router), React and TypeScript. One design system, one stylesheet, no UI framework, no database.
 
-**Live:** https://aquiferreachllc.vercel.app (Vercel auto-deploys on push to `main`); `NEXT_PUBLIC_SITE_URL` overrides the canonical/OG/sitemap host)
+**Live:** https://demo-website-well-drilling.vercel.app — Vercel auto-deploys on push to `main`.
+The canonical URL, Open Graph URL, `robots.txt` and `sitemap.xml` all point at **https://aquiferreachllc.vercel.app**, which is the intended project name: rename the Vercel project (Settings → General → Rename Project) and that domain starts serving immediately, no code change. `NEXT_PUBLIC_SITE_URL` overrides the host for a custom domain later.
 **Business details used:** Aquifer Reach LLC, (904) 477-9809 · 14404 Bartram Creek Blvd, St Johns, FL 32259 (mailing) · 646 E 21st St, Jacksonville, FL 32206 (yard, by appointment) · Mon–Fri 8 am–6 pm, Sat 8 am–12 pm · family-owned since 2017 · six services: rock, screen, artesian, salt & pepper, pump installation, well abandonment.
 
 ## Run it
@@ -28,7 +29,7 @@ Everything a non-developer would touch lives in one file: **`src/lib/site-data.t
 
 Typography, colour and layout live in `src/app/globals.css`. Photography lives in `public/images/` — keep the crop ratios used there (hero 928×1152, service cards 1200×800, gallery 900×900 / 1200×900) or pass new sizes to the same `next/image` components.
 
-The tab icon is `src/app/icon.svg` — a vector redraw of the company logo with no background plate. `src/lib/logo-mark.ts` is generated from it (do not hand-edit) and feeds the header and footer brand mark, so the favicon and the in-page mark can never differ. `src/app/apple-icon.png` is the same artwork for the home screen.
+The brand mark — `src/app/icon.svg` — is a hand-authored vector: a gradient droplet with a specular highlight behind a gradient leaf, plus a soft drop shadow. No background plate and no rounded square, so it sits on the cream header and the navy panel alike, and stays legible at 16px. The same file is the favicon and is rendered in the header/footer through `BrandMark`, so the two can never disagree; `src/app/apple-icon.png` is a raster render of it for the home screen. Re-run `rsvg-convert -w 420 -h 420 src/app/icon.svg -o src/app/apple-icon.png` after any change to the artwork.
 
 The self-hosted variable font is `public/fonts/dm-sans.ttf` (DM Sans, SIL Open Font License 1.1, `OFL.txt` included); one `@font-face` rule in `globals.css` covers every weight the design uses.
 
