@@ -1,8 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import { siteUrl } from "@/lib/site-url";
 import "./globals.css";
-
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://aquiferreachllc.vercel.app";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

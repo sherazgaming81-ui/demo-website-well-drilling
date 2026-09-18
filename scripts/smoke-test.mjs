@@ -25,12 +25,15 @@ try {
   // Every picture the page asks for must actually load — this is what breaks
   // when public/images is missing or a path is wrong. Photos below the fold are
   // lazily loaded, so walk the page first and wait for every image to settle.
+  // The page sets scroll-behavior: smooth, so window.scrollTo() animates and a fast
+  // loop never actually gets anywhere. Jump instantly instead.
   await page.evaluate(async () => {
-    for (let y = 0; y < document.body.scrollHeight; y += 500) {
-      window.scrollTo(0, y);
-      await new Promise((resolve) => setTimeout(resolve, 60));
+    const el = document.documentElement;
+    for (let y = 0; y < el.scrollHeight; y += 400) {
+      el.scrollTo({ top: y, behavior: "instant" });
+      await new Promise((resolve) => setTimeout(resolve, 90));
     }
-    window.scrollTo(0, 0);
+    el.scrollTo({ top: 0, behavior: "instant" });
   });
   // Force every picture to load now (some are lazy and below the fold) so the
   // check is deterministic, then wait — bounded, so one stuck image cannot hang
@@ -184,6 +187,10 @@ try {
   });
   assert.ok(revealState.total > 45, `expected the page to be reveal-wired, found ${revealState.total}`);
   assert.deepEqual(revealState.stuck, [], `elements never revealed: ${revealState.stuck.join(", ")}`);
+  await page.evaluate(() => document.querySelector(".services-footnote")?.scrollIntoView({ block: "center", behavior: "instant" }));
+  await page.waitForTimeout(650);
+  const revealState2 = await page.evaluate(() => ({ stuck: [...document.querySelectorAll("[data-reveal]")].filter((el) => !el.hasAttribute("data-shown")).length }));
+  assert.equal(revealState2.stuck, 0, "elements below a mid-page anchor never revealed");
   const visible = await page.evaluate(() => [...document.querySelectorAll("[data-reveal]")].every((el) => Number(getComputedStyle(el).opacity) > 0.98));
   assert.equal(visible, true, "some revealed elements are still transparent");
 

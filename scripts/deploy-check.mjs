@@ -19,6 +19,14 @@ check("homepage responds", html.length > 5000, `${html.length} bytes`);
 check("serves the real business title", /<title>Aquifer Reach LLC/.test(html));
 check("no demo/fictional copy left", !/demonstration brand|fictional demonstration|hello@aquifer\.example|\(888\) 555-0142/i.test(html));
 
+// A canonical that points at a host nobody serves is worse than no canonical.
+const canonical = html.match(/rel="canonical" href="(https?:\/\/[^"]+)"/)?.[1];
+check("page declares a canonical URL", Boolean(canonical), canonical ?? "none");
+if (canonical) {
+  const res = await fetch(canonical, { method: "GET", redirect: "follow" }).catch(() => null);
+  check("canonical host actually serves the site", Boolean(res?.ok), res ? String(res.status) : "unreachable");
+}
+
 const cssHrefs = [...new Set([...html.matchAll(/href="(\/_next\/static\/[^"]+\.css)"/g)].map((m) => m[1]))];
 check("stylesheets are linked", cssHrefs.length > 0, cssHrefs.join(", ") || "none found");
 
