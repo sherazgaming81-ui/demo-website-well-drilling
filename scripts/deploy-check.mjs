@@ -36,7 +36,12 @@ const missing = required.filter((selector) => !css.includes(selector));
 check("deployed CSS is current (not a stale chunk)", missing.length === 0, missing.length ? `missing: ${missing.join(", ")}` : `${css.length} bytes`);
 
 const assets = [...new Set([...html.matchAll(/images%2F([a-z0-9-]+\.jpg)/g)].map((m) => `/images/${m[1]}`))];
-for (const path of ["/fonts/dm-sans.ttf", "/icon.png", "/robots.txt", "/sitemap.xml", ...assets]) {
+// Icons are read from the document, not hardcoded: Next names them from the files in
+// src/app (icon.svg today, icon.png before), and a check pinned to a stale name cries
+// wolf. Whatever the page asks for must answer 200.
+const icons = [...new Set([...html.matchAll(/<link[^>]+href="(\/[^"]*(?:icon|apple-icon)[^"]*\.(?:svg|png|ico))"/g)].map((m) => m[1]))];
+check("page links at least one icon", icons.length > 0, icons.join(", ") || "none");
+for (const path of ["/fonts/dm-sans.ttf", ...icons, "/robots.txt", "/sitemap.xml", ...assets]) {
   const res = await fetch(base + path, { method: "GET" });
   check(`asset ${path}`, res.status === 200, String(res.status));
 }
