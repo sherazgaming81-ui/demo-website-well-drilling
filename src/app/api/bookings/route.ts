@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
+import { bookingServices } from "@/lib/site-data";
 import { validateBooking, type BookingFields } from "@/lib/booking";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Demo storage: no database.
- * Requests live in this process only, so nothing needs to be provisioned to run
- * the site. Entries are kept for the dedupe/rate-limit window and then pruned.
+ * Lead handling without a database.
+ * Every request is kept in this process for the dedupe/rate-limit window, and —
+ * when LEAD_WEBHOOK_URL is configured — forwarded to the owner's inbox or CRM.
+ * A failing forward never blocks the customer's confirmation.
  */
 type StoredBooking = { id: string; email: string; createdAt: number };
 
@@ -17,12 +19,12 @@ const WINDOW_MS = 60 * 60 * 1000; // one hour, as the rate limit message promise
 const MAX_PER_EMAIL_PER_WINDOW = 5;
 
 const globalForStore = globalThis as typeof globalThis & {
-  __demoBookingsByRequest?: Map<string, StoredBooking>;
-  __demoBookingsByEmail?: Map<string, number[]>;
+  __leadStoreByRequest?: Map<string, StoredBooking>;
+  __leadStoreByEmail?: Map<string, number[]>;
 };
 
-const byRequestId = (globalForStore.__demoBookingsByRequest ??= new Map<string, StoredBooking>());
-const byEmail = (globalForStore.__demoBookingsByEmail ??= new Map<string, number[]>());
+const byRequestId = (globalForStore.__leadStoreByRequest ??= new Map<string, StoredBooking>());
+const byEmail = (globalForStore.__leadStoreByEmail ??= new Map<string, number[]>());
 
 function prune() {
   const cutoff = Date.now() - WINDOW_MS;
@@ -101,6 +103,31 @@ export async function POST(request: NextRequest) {
   byRequestId.set(fields.requestId, { id, email, createdAt: Date.now() });
   recent.push(Date.now());
   byEmail.set(email, recent);
+
+  const webhook = process.env.LEAD_WEBHOOK_URL?.trim();
+  if (webhook) {
+    const lead = {
+      reference: `AQ-${id.slice(0, 8).toUpperCase()}`,
+      receivedAt: new Date().toISOString(),
+      fullName: fields.fullName.trim(),
+      email,
+      phone: fields.phone.trim(),
+      zip: fields.zip.trim(),
+      service: fields.service,
+      serviceLabel: bookingServices.find((item) => item.value === fields.service)?.label ?? fields.service,
+      preferredDate: fields.preferredDate,
+      timePreference: fields.timePreference,
+      notes: fields.notes.trim(),
+      source: "aquifer-reach-website",
+    };
+    // Fire and forget: the customer already has a valid reference.
+    void fetch(webhook, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(lead),
+      signal: AbortSignal.timeout(5000),
+    }).catch((cause) => console.error("Lead forward failed:", cause instanceof Error ? cause.message : cause));
+  }
 
   return confirmation(id, 201);
 }

@@ -41,7 +41,7 @@ export function BrandMark({ className = "" }: { className?: string }) {
 }
 
 export function Brand({ light = false }: { light?: boolean }) {
-  return <a href="#top" className={`brand ${light ? "brand-light" : ""}`} aria-label="Aquifer Well Co. home"><BrandMark /><span className="brand-type"><span className="brand-word">aquifer<span>.</span></span><span className="brand-sub">WELL CO.</span></span></a>;
+  return <a href="#top" className={`brand ${light ? "brand-light" : ""}`} aria-label="Aquifer Reach LLC home"><BrandMark /><span className="brand-type"><span className="brand-word">aquifer reach</span><span className="brand-sub">WELL DRILLING CO.</span></span></a>;
 }
 
 export function Stars({ size = 13 }: { size?: number }) {

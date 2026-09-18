@@ -3,12 +3,12 @@ const base = process.env.TEST_URL || "http://127.0.0.1:3111";
 const d = new Date();
 d.setUTCDate(d.getUTCDate() + 1);
 const valid = {
-  service: "residential",
-  zip: "28801",
+  service: "rock-wells",
+  zip: "32256",
   preferredDate: d.toISOString().slice(0, 10),
   timePreference: "morning",
   fullName: "Alex Demo",
-  email: `aquifer-check-${Date.now()}@example.com`,
+  email: `aquifer-lead-${Date.now()}@example.com`,
   phone: "(919) 555-0142",
   notes: "Automated demonstration request. No real customer or appointment.",
   consent: true,
