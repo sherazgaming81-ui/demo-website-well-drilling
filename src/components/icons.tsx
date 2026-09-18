@@ -1,3 +1,4 @@
+import { LOGO_GROUPS, LOGO_VIEWBOX } from "@/lib/logo-mark";
 import type { ReactNode } from "react";
 
 export type IconName = "arrow-right" | "arrow-up-right" | "arrow-down" | "phone" | "check" | "shield" | "clock" | "droplet" | "menu" | "close" | "chevron-down" | "chevron-left" | "chevron-right" | "plus" | "minus" | "map-pin" | "calendar" | "sprout" | "home" | "wrench" | "message" | "ruler" | "file-check" | "lock" | "mail" | "star" | "download";
@@ -37,7 +38,8 @@ export function Icon({ name, size = 20, className = "" }: { name: IconName; size
 }
 
 export function BrandMark({ className = "" }: { className?: string }) {
-  return <svg className={className} width="39" height="47" viewBox="0 0 42 50" fill="none" aria-hidden="true"><path d="M21 1C17 7 3 21 3 31a18 18 0 0 0 36 0C39 21 25 7 21 1Z" fill="currentColor" /><path d="M5 30c6-5 11-5 17-1s11 4 16 0M7 37c5-4 10-4 15-1s9 3 13 0" stroke="white" strokeWidth="2.6" strokeLinecap="round" /></svg>;
+  // The company mark itself — same vector as the favicon, no background plate.
+  return <svg className={className} width="39" height="50" viewBox={LOGO_VIEWBOX} fill="none" aria-hidden="true">{LOGO_GROUPS.map((group) => <g key={group.fill} transform={group.transform} fill={group.fill}>{group.d.map((d) => <path key={d} d={d} />)}</g>)}</svg>;
 }
 
 export function Brand({ light = false }: { light?: boolean }) {

@@ -23,8 +23,9 @@ export function CountUp({ to, suffix = "", durationMs = 1400, className, ...rest
     if (!node) return;
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     if (reduce || !("IntersectionObserver" in window)) {
-      setValue(to);
-      return;
+      // Deferred a frame so the effect body never sets state synchronously.
+      const settle = requestAnimationFrame(() => setValue(to));
+      return () => cancelAnimationFrame(settle);
     }
 
     let frame = 0;

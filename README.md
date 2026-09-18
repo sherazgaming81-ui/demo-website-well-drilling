@@ -2,7 +2,7 @@
 
 Single-page marketing site for a licensed Florida well drilling contractor, built with Next.js (App Router), React and TypeScript. One design system, one stylesheet, no UI framework, no database.
 
-**Live:** https://demo-website-well-drilling.vercel.app (Vercel auto-deploys on push to `main`)
+**Live:** https://aquiferreachllc.vercel.app (Vercel auto-deploys on push to `main`); `NEXT_PUBLIC_SITE_URL` overrides the canonical/OG/sitemap host)
 **Business details used:** Aquifer Reach LLC, (904) 477-9809 · 14404 Bartram Creek Blvd, St Johns, FL 32259 (mailing) · 646 E 21st St, Jacksonville, FL 32206 (yard, by appointment) · Mon–Fri 8 am–6 pm, Sat 8 am–12 pm · family-owned since 2017 · six services: rock, screen, artesian, salt & pepper, pump installation, well abandonment.
 
 ## Run it
@@ -23,10 +23,12 @@ Everything a non-developer would touch lives in one file: **`src/lib/site-data.t
 - `stats` / `proofPoints` / `promises` — the trust bar and the "Why choose us" list
 - `steps` — the three-step process
 - `faqs` — accordion copy
-- `projects` — the work gallery, with captions
+- `projects` — the work gallery, with captions (tiles render three across at 3:2)
 - `bookingServices` — the options in the estimate form (ids must stay in sync with `services[].id`)
 
 Typography, colour and layout live in `src/app/globals.css`. Photography lives in `public/images/` — keep the crop ratios used there (hero 928×1152, service cards 1200×800, gallery 900×900 / 1200×900) or pass new sizes to the same `next/image` components.
+
+The tab icon is `src/app/icon.svg` — a vector redraw of the company logo with no background plate. `src/lib/logo-mark.ts` is generated from it (do not hand-edit) and feeds the header and footer brand mark, so the favicon and the in-page mark can never differ. `src/app/apple-icon.png` is the same artwork for the home screen.
 
 The self-hosted variable font is `public/fonts/dm-sans.ttf` (DM Sans, SIL Open Font License 1.1, `OFL.txt` included); one `@font-face` rule in `globals.css` covers every weight the design uses.
 
