@@ -3,10 +3,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/clean-build.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:deploy": "node scripts/deploy-check.mjs"
   },
   "dependencies": {
     "next": "^16.3.5",
