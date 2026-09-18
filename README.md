@@ -29,7 +29,11 @@ Everything a non-developer would touch lives in one file: **`src/lib/site-data.t
 
 Typography, colour and layout live in `src/app/globals.css`. Photography lives in `public/images/` — keep the crop ratios used there (hero 928×1152, service cards 1200×800, gallery 900×900 / 1200×900) or pass new sizes to the same `next/image` components.
 
-The brand mark — `src/app/icon.svg` — is a hand-authored vector: a gradient droplet with a specular highlight behind a gradient leaf, plus a soft drop shadow. No background plate and no rounded square, so it sits on the cream header and the navy panel alike, and stays legible at 16px. The same file is the favicon and is rendered in the header/footer through `BrandMark`, so the two can never disagree; `src/app/apple-icon.png` is a raster render of it for the home screen. Re-run `rsvg-convert -w 420 -h 420 src/app/icon.svg -o src/app/apple-icon.png` after any change to the artwork.
+The brand mark — `src/app/icon.svg` — is a hand-authored vector: a gradient droplet with a specular highlight behind a gradient leaf, plus a soft drop shadow. No background plate and no rounded square, so it sits on the cream header and the navy panel alike, and stays legible at 16px.
+
+It is also **alive**. Five loops live inside the SVG itself, in its own `<style>` block: `aq-breathe` (the droplet swells 1 → 1.028 over 9s), `aq-sweep` (a band of light crosses the droplet every 7s, clipped so it never spills), `aq-sway` (the leaf rotates ±1.6° over 8.5s around its stem), `aq-trace` (a highlight travels the leaf's rim) and `aq-glint` (the specular streak pulses). All of them stop dead under `prefers-reduced-motion: reduce`, which the browser check asserts by counting `document.getAnimations()`.
+
+The same file is the favicon and is rendered in the header/footer through `BrandMark`, so the two can never disagree; `src/app/apple-icon.png` is a raster render of it for the home screen (animated favicons depend on the browser — Chrome and Firefox animate SVG favicons, Safari shows a still). After changing the artwork, re-run `rsvg-convert -w 420 -h 420 src/app/icon.svg -o src/app/apple-icon.png`.
 
 The self-hosted variable font is `public/fonts/dm-sans.ttf` (DM Sans, SIL Open Font License 1.1, `OFL.txt` included); one `@font-face` rule in `globals.css` covers every weight the design uses.
 

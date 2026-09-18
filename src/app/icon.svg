@@ -1,28 +1,73 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <defs>
-    <linearGradient id="aqDrop" x1="12" y1="8" x2="38" y2="53" gradientUnits="userSpaceOnUse">
+    <path id="aqDrop" d="M24 3C24 3 5 23 5 37c0 11 8.5 18 19 18s19-7 19-18C43 23 24 3 24 3Z"/>
+    <path id="aqLeaf" d="M10 58C6 40 20 19 49 13 57 35 44 57 10 58Z"/>
+
+    <linearGradient id="aqDropFill" x1="12" y1="8" x2="38" y2="53" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#5cc7f5"/>
       <stop offset=".5" stop-color="#1586c9"/>
       <stop offset="1" stop-color="#07527f"/>
     </linearGradient>
-    <linearGradient id="aqLeaf" x1="49" y1="13" x2="10" y2="58" gradientUnits="userSpaceOnUse">
+    <linearGradient id="aqLeafFill" x1="49" y1="13" x2="10" y2="58" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#c2ee45"/>
       <stop offset=".46" stop-color="#7cc11f"/>
       <stop offset="1" stop-color="#2c700d"/>
     </linearGradient>
-    <radialGradient id="aqSheen" cx=".33" cy=".28" r=".6">
+    <radialGradient id="aqBodySheen" cx=".33" cy=".28" r=".6">
       <stop offset="0" stop-color="#ffffff" stop-opacity=".5"/>
       <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
     </radialGradient>
+    <linearGradient id="aqSweep" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset=".42" stop-color="#ffffff" stop-opacity=".55"/>
+      <stop offset=".5" stop-color="#eaffff" stop-opacity=".85"/>
+      <stop offset=".58" stop-color="#ffffff" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+
+    <clipPath id="aqDropClip"><use href="#aqDrop"/></clipPath>
     <filter id="aqShadow" x="-24%" y="-24%" width="148%" height="148%">
       <feDropShadow dx="0" dy="1.1" stdDeviation="1.15" flood-color="#062338" flood-opacity=".34"/>
     </filter>
+
+    <style>
+      /* Always-on, deliberately slow: this is a mark, not a banner. Everything is
+         paused for visitors who ask for reduced motion (the media query works inside
+         an SVG used as an image, which is how the site renders it). */
+      .aq-breathe { animation: aq-breathe 9s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: 50% 62%; }
+      .aq-sweep   { animation: aq-sweep 7s cubic-bezier(.5, 0, .3, 1) infinite; transform-box: fill-box; }
+      .aq-leaf    { animation: aq-sway 8.5s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: 8% 94%; }
+      .aq-rim     { stroke-dasharray: 15 165; animation: aq-trace 7s linear infinite; }
+      .aq-glint   { animation: aq-glint 4.5s ease-in-out infinite alternate; }
+
+      @keyframes aq-breathe { from { transform: scale(1); } to { transform: scale(1.028); } }
+      @keyframes aq-sway    { from { transform: rotate(-1.7deg); } to { transform: rotate(1.5deg); } }
+      @keyframes aq-glint   { from { opacity: .45; } to { opacity: .85; } }
+      /* the light travels across, then holds off-canvas before it returns */
+      @keyframes aq-sweep {
+        0%   { transform: translate(-34px, 0) rotate(17deg); }
+        42%  { transform: translate(76px, 0) rotate(17deg); }
+        100% { transform: translate(76px, 0) rotate(17deg); }
+      }
+      @keyframes aq-trace { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -180; } }
+
+      @media (prefers-reduced-motion: reduce) {
+        .aq-breathe, .aq-sweep, .aq-leaf, .aq-rim, .aq-glint { animation: none; }
+        .aq-rim { stroke-dasharray: none; }
+      }
+    </style>
   </defs>
+
   <g filter="url(#aqShadow)">
-    <path id="drop" d="M24 3C24 3 5 23 5 37c0 11 8.5 18 19 18s19-7 19-18C43 23 24 3 24 3Z" fill="url(#aqDrop)"/>
-    <use href="#drop" fill="url(#aqSheen)"/>
-    <path d="M10 58C6 40 20 19 49 13 57 35 44 57 10 58Z" fill="url(#aqLeaf)"/>
+    <g class="aq-breathe">
+      <use href="#aqDrop" fill="url(#aqDropFill)"/>
+      <use href="#aqDrop" fill="url(#aqBodySheen)"/>
+      <g clip-path="url(#aqDropClip)">
+        <rect class="aq-sweep" x="-16" y="-14" width="15" height="92" fill="url(#aqSweep)"/>
+      </g>
+    </g>
+    <use href="#aqLeaf" class="aq-leaf" fill="url(#aqLeafFill)"/>
   </g>
-  <path d="M10 58C6 40 20 19 49 13" fill="none" stroke="#ffffff" stroke-opacity=".32" stroke-width="1.6" stroke-linecap="round"/>
-  <path d="M15 24c-3 4.5-4 9-2 13" fill="none" stroke="#ffffff" stroke-opacity=".6" stroke-width="3.4" stroke-linecap="round"/>
+  <path class="aq-rim" d="M10 58C6 40 20 19 49 13" fill="none" stroke="#ffffff" stroke-opacity=".42" stroke-width="1.7" stroke-linecap="round"/>
+  <path class="aq-glint" d="M15 24c-3 4.5-4 9-2 13" fill="none" stroke="#ffffff" stroke-opacity=".62" stroke-width="3.4" stroke-linecap="round"/>
 </svg>
