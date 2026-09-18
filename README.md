@@ -50,6 +50,19 @@ Any HTTP receiver works: a Zapier/Make catch hook, a CRM webhook, a Slack workfl
 
 A failed forward is logged and never blocks the customer's confirmation. If leads must be queryable later, add storage (Vercel Blob, Postgres, Sheet) in `src/app/api/bookings/route.ts` — the module deliberately does not read any environment variable at import time, so a missing variable can never break the build.
 
+## Motion
+
+Motion is deliberately light and skippable — nothing depends on it to be readable.
+
+- `src/lib/use-reveals.ts` drives scroll reveals with one `IntersectionObserver` for the page. Elements opt in with `rv(index)` from `src/lib/site-data`-consuming components, and the observer marks them with a `data-shown` **attribute**, not a class: React rewrites `className` on every re-render, and a class marker gets wiped when a dialog closes, which would leave sections faded out forever.
+- `src/app/layout.tsx` sets `js-reveal` on `<html>` before first paint, so hidden-until-revealed styling only exists when scripts actually run.
+- `src/components/count-up.tsx` counts the trust-bar figures up when they scroll into view.
+- The contour lines in the navy "why us" and blue closing panels drift and breathe (`contour-drift`, `contour-breathe`); the hero photograph breathes (`hero-breathe`); buttons catch a sheen; cards and gallery tiles lift; FAQ answers ease open.
+- The header compacts after 28px of scroll and grows a reading-progress line under it, driven by a single rAF-throttled `--scroll` custom property.
+- Everything is neutralised under `prefers-reduced-motion: reduce` — content is visible immediately and the animations are switched off. The smoke test asserts exactly that.
+
+If you want less motion, delete the `/* ── Motion ── */` block at the end of `src/app/globals.css`; the markup keeps working because `[data-reveal]` alone does nothing without those rules.
+
 ## Checks
 
 ```bash
@@ -62,7 +75,7 @@ TEST_URL=http://127.0.0.1:3000 node scripts/smoke-test.mjs
 TEST_URL=http://127.0.0.1:3000 node scripts/lead-endpoint-check.mjs
 ```
 
-`smoke-test.mjs` (13 checks) walks the real journey in Chromium: every image must decode with no 404, the DM Sans face must be active, the six service cards and their dialogs work, an estimate request completes end to end and returns an `AQ-########` reference, the downloadable summary matches it, the API rejects bad input (422 / 403 / 400 / 415) and repeats idempotently, no element overflows or clips at ten widths from 1600px to 320px, mobile navigation hands off correctly, and the run finishes with zero console errors and zero failed requests. `lead-endpoint-check.mjs` (11 checks) hits the endpoint directly.
+`smoke-test.mjs` (15 checks) walks the real journey in Chromium: every image must decode with no 404, the DM Sans face must be active, the six service cards and their dialogs work, an estimate request completes end to end and returns an `AQ-########` reference, the downloadable summary matches it, the API rejects bad input (422 / 403 / 400 / 415) and repeats idempotently, no element overflows or clips at ten widths from 1600px to 320px, mobile navigation hands off correctly, and the run finishes with zero console errors and zero failed requests, and the motion layer is verified: every `[data-reveal]` element ends up shown, the contour rings report a running animation, the counted stats settle on `8+` and `1,000s`, and `prefers-reduced-motion` is re-tested with emulation. `lead-endpoint-check.mjs` (11 checks) hits the endpoint directly.
 
 If the CSS looks unchanged after an edit, delete `.next` before rebuilding — Turbopack can hand back a cached stylesheet.
 

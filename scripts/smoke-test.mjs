@@ -176,6 +176,61 @@ try {
   await page.waitForTimeout(150);
   await page.screenshot({ path: "artifacts/aquifer-mobile.png" });
 
+  // Motion layer: nothing may stay invisible, and the reduced-motion path must
+  // show everything immediately.
+  const revealState = await page.evaluate(() => {
+    const all = [...document.querySelectorAll("[data-reveal]")];
+    return { total: all.length, stuck: all.filter((el) => !el.hasAttribute("data-shown")).map((el) => el.className.slice(0, 34)) };
+  });
+  assert.ok(revealState.total > 45, `expected the page to be reveal-wired, found ${revealState.total}`);
+  assert.deepEqual(revealState.stuck, [], `elements never revealed: ${revealState.stuck.join(", ")}`);
+  const visible = await page.evaluate(() => [...document.querySelectorAll("[data-reveal]")].every((el) => Number(getComputedStyle(el).opacity) > 0.98));
+  assert.equal(visible, true, "some revealed elements are still transparent");
+
+  // Motion state is only meaningful mid-page: scroll to 60% and let the
+  // rAF-throttled listener run before reading --scroll and the compact header.
+  await page.evaluate(() => window.scrollTo(0, Math.round(document.documentElement.scrollHeight * 0.6)));
+  await page.waitForTimeout(400);
+  const motion = await page.evaluate(() => {
+    const ring = document.querySelector(".contours-ring");
+    const rotor = document.querySelector(".contours-rotor");
+    const runs = (el) => (el ? getComputedStyle(el).animationName : "none");
+    return {
+      rings: document.querySelectorAll(".contours-ring").length,
+      ringAnim: runs(ring),
+      rotorAnim: runs(rotor),
+      heroAnim: runs(document.querySelector(".hero-image > img")),
+      progress: getComputedStyle(document.documentElement).getPropertyValue("--scroll").trim(),
+      scrolledClass: document.querySelector(".site-header").className.includes("is-scrolled"),
+      stats: [...document.querySelectorAll(".trust-stat > strong")].map((el) => el.textContent.trim()),
+    };
+  });
+  assert.equal(motion.rings, 26, "each of the two contour panels should carry 13 animated rings");
+  assert.equal(motion.ringAnim, "contour-breathe");
+  assert.equal(motion.rotorAnim, "contour-drift");
+  assert.equal(motion.heroAnim, "hero-breathe");
+  assert.ok(Number(motion.progress) > 0.5, `reading progress line did not advance (${motion.progress})`);
+  assert.equal(motion.scrolledClass, true, "header never compacted on scroll");
+  assert.match(motion.stats.join(" "), /8\+/);
+  assert.match(motion.stats.join(" "), /1,000s/);
+  ok(`Motion live: ${motion.rings} contour rings drifting, hero breathing, stats counted to ${motion.stats[0]}/${motion.stats[1]}, progress ${(Number(motion.progress) * 100).toFixed(0)}%`);
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(300);
+  const calm = await page.evaluate(() => {
+    const els = [...document.querySelectorAll("[data-reveal]")];
+    return {
+      hidden: els.filter((el) => Number(getComputedStyle(el).opacity) < 0.99).length,
+      ringAnim: getComputedStyle(document.querySelector(".contours-ring")).animationDuration,
+      heroAnim: getComputedStyle(document.querySelector(".hero-image > img")).animationDuration,
+    };
+  });
+  assert.equal(calm.hidden, 0, `${calm.hidden} elements would be invisible with reduced motion on`);
+  assert.ok(parseFloat(calm.ringAnim) < 0.02 && parseFloat(calm.heroAnim) < 0.02, "animations not neutralised under reduced motion");
+  ok("prefers-reduced-motion: content visible, animation off");
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+
   assert.deepEqual(failedRequests, [], `failed network requests: ${failedRequests.join(", ")}`);
   assert.deepEqual(errors, [], `client errors: ${errors.join(", ")}`);
   ok("Zero failed requests and zero client errors");

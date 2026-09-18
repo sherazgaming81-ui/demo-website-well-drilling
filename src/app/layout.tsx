@@ -47,5 +47,13 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#f8f9f6" };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
-  return <html lang="en"><body>{children}</body></html>;
+  return (
+    <html lang="en">
+      <head>
+        {/* Set the flag before first paint so revealed elements never flash in. */}
+        <script dangerouslySetInnerHTML={{ __html: "document.documentElement.className+=' js-reveal'" }} />
+      </head>
+      <body>{children}</body>
+    </html>
+  );
 }

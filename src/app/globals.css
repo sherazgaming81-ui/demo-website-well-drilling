@@ -797,3 +797,57 @@ h1 > span { display: block; white-space: nowrap; }
 @media (max-width: 900px) {
   .work-tile:first-child { grid-column: span 1; aspect-ratio: 4 / 3; }
 }
+
+/* ── Motion ─────────────────────────────────────────────────────────────
+   Everything here is opt-in, short, and disabled under reduced-motion.
+   Revealed elements only start hidden when <html class="js-reveal"> is set
+   by the inline script in the document head, so content can never get stuck
+   invisible if a script fails. */
+
+.js-reveal [data-reveal]:not([data-shown]) {
+  opacity: 0;
+  transform: translate3d(0, 22px, 0);
+  transition: opacity .8s cubic-bezier(.22, .61, .36, 1) var(--rd, 0ms),
+              transform .8s cubic-bezier(.22, .61, .36, 1) var(--rd, 0ms);
+}
+.js-reveal [data-reveal][data-shown] { opacity: 1; transform: none; filter: none; }
+.js-reveal h1 [data-reveal]:not([data-shown]) { transform: translate3d(0, 40px, 0); filter: blur(7px); }
+
+/* The survey lines in the navy and blue panels keep drifting. */
+.contours-rotor { transform-origin: 0 0; animation: contour-drift 68s linear infinite; }
+.contours-ring { transform-origin: 0 0; animation: contour-breathe 11s cubic-bezier(.45, .05, .55, .95) infinite; }
+@keyframes contour-drift { from { transform: rotate(-32deg); } to { transform: rotate(328deg); } }
+@keyframes contour-breathe { 0%, 100% { transform: scale(1); opacity: .65; } 50% { transform: scale(1.038); opacity: 1; } }
+
+/* Slow breathing on the hero photograph. */
+.hero-image > img { animation: hero-breathe 28s ease-in-out infinite alternate; }
+@keyframes hero-breathe { from { transform: scale(1.001); } to { transform: scale(1.075); } }
+
+/* Cards and tiles lift; buttons catch a sheen. */
+.service-card, .work-tile { transition: transform .5s cubic-bezier(.22, .61, .36, 1), box-shadow .5s ease; }
+.service-card:hover, .work-tile:hover { transform: translateY(-5px); box-shadow: 0 22px 46px #14343f17; }
+.button { position: relative; overflow: hidden; }
+.button::after { content: ""; position: absolute; inset: 0; background: linear-gradient(115deg, transparent 32%, #ffffff42 46%, transparent 60%); transform: translateX(-130%); transition: transform .8s cubic-bezier(.22, .61, .36, 1); pointer-events: none; }
+.button:hover::after, .button:focus-visible::after { transform: translateX(130%); }
+.button-white::after { background: linear-gradient(115deg, transparent 32%, #2465e82e 46%, transparent 60%); }
+
+/* Header compacts as you scroll, with a reading-progress line under it. */
+.site-header { transition: box-shadow .35s ease, background-color .35s ease; }
+.site-header::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: linear-gradient(90deg, var(--blue), #79aaff); transform: scaleX(var(--scroll, 0)); transform-origin: 0 50%; }
+.header-inner { transition: height .35s cubic-bezier(.22, .61, .36, 1); }
+.site-header.is-scrolled { background: #f8f9f6fa; box-shadow: 0 10px 34px #14343f12; }
+.site-header.is-scrolled .header-inner { height: 74px; }
+.site-header.is-scrolled .brand > svg { transform: scale(.9); }
+.brand > svg { transition: transform .35s cubic-bezier(.22, .61, .36, 1); }
+
+/* FAQ answers ease open instead of popping. */
+.faq-answer { animation: faq-in .45s cubic-bezier(.22, .61, .36, 1) both; }
+@keyframes faq-in { from { opacity: 0; transform: translateY(-7px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .js-reveal [data-reveal], .js-reveal h1 [data-reveal] { opacity: 1 !important; transform: none !important; filter: none !important; transition: none !important; }
+  .js-reveal [data-reveal]:not([data-shown]) { opacity: 1; transform: none; }
+  .hero-image > img, .contours-rotor, .contours-ring, .faq-answer { animation: none !important; }
+  .button::after { display: none; }
+  .service-card:hover, .work-tile:hover { transform: none; }
+}

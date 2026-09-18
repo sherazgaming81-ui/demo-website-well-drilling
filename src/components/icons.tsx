@@ -49,5 +49,7 @@ export function Stars({ size = 13 }: { size?: number }) {
 }
 
 export function Contours({ className = "" }: { className?: string }) {
-  return <svg className={className} viewBox="0 0 640 520" fill="none" aria-hidden="true"><g transform="translate(320 260) rotate(-32)">{Array.from({ length: 13 }, (_, index) => <path key={index} d="M-102-40C-98-104-24-100 21-73S113-76 135-15 100 76 34 82-94 107-110 50-110-7-102-40Z" transform={`scale(${0.55 + index * 0.2})`} stroke="currentColor" strokeWidth="0.9" />)}</g></svg>;
+  // The outer group centres, the rotor drifts, and every ring breathes on its
+  // own offset so the contour lines read like a live topographic survey.
+  return <svg className={`contours ${className}`} viewBox="0 0 640 520" fill="none" aria-hidden="true"><g transform="translate(320 260)"><g className="contours-rotor">{Array.from({ length: 13 }, (_, index) => <g key={index} className="contours-ring" style={{ animationDelay: `${index * -0.7}s` }}><g transform={`scale(${0.55 + index * 0.2})`}><path d="M-102-40C-98-104-24-100 21-73S113-76 135-15 100 76 34 82-94 107-110 50-110-7-102-40Z" stroke="currentColor" strokeWidth="0.9" /></g></g>)}</g></g></svg>;
 }
