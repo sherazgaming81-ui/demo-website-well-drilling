@@ -822,7 +822,7 @@ h1 > span { display: block; white-space: nowrap; }
 .js-reveal h1 [data-reveal]:not([data-shown]) { transform: translate3d(0, 40px, 0); filter: blur(7px); }
 
 /* The survey lines in the navy and blue panels keep drifting. */
-.contours-rotor { transform-origin: 0 0; animation: contour-drift 68s linear infinite; }
+.contours-rotor { transform: rotate(-32deg); transform-origin: 0 0; animation: contour-drift 68s linear infinite; }
 .contours-ring { transform-origin: 0 0; animation: contour-breathe 11s cubic-bezier(.45, .05, .55, .95) infinite; }
 @keyframes contour-drift { from { transform: rotate(-32deg); } to { transform: rotate(328deg); } }
 @keyframes contour-breathe { 0%, 100% { transform: scale(1); opacity: .65; } 50% { transform: scale(1.038); opacity: 1; } }
@@ -860,15 +860,10 @@ h1 > span { display: block; white-space: nowrap; }
   .service-card:hover, .work-tile:hover { transform: none; }
 }
 
-/* ── Mobile / touch performance ────────────────────────────────────────
-   Phones do not need to repaint the contour lines, the hero zoom or the button
-   sheen 60 times a second, and :hover lifts get stuck on touch. Motion that
-   carries meaning (the one-shot reveal) stays; loops stop. */
+/* ── Contours on touch screens ─────────────────────────────────────────
+   Only the drifting/breathing survey rings are stopped on phones and tablets —
+   that is the loop the client found irritating there. Every other motion (hero
+   breathe, reveals, FAQ ease, header blur, card lifts) stays exactly as on desktop. */
 @media (max-width: 860px), ((pointer: coarse) and (hover: none)) {
-  .contours-rotor, .contours-ring, .hero-image > img, .faq-answer { animation: none !important; }
-  .site-header { backdrop-filter: none; background: #f8f9f6; }
-  .button::after { display: none; }
-  .service-card:hover, .work-tile:hover { transform: none; box-shadow: none; }
-  .service-card, .work-tile { transition: none; }
-  .service-card:hover .service-image img, .work-tile:hover > img { transform: none; }
+  .contours-rotor, .contours-ring { animation: none !important; }
 }

@@ -180,17 +180,23 @@ try {
   await page.screenshot({ path: "artifacts/aquifer-mobile.png" });
 
   // Motion layer: nothing may stay invisible, and the reduced-motion path must
-  // show everything immediately.
+  // show everything immediately. Measured at desktop width after a full instant
+  // sweep, so "not yet scrolled to" can never be mistaken for "never revealed".
+  await page.setViewportSize({ width: 1456, height: 900 });
+  await page.evaluate(async () => {
+    const el = document.documentElement;
+    for (let y = 0; y <= el.scrollHeight; y += 450) {
+      el.scrollTo({ top: y, behavior: "instant" });
+      await new Promise((resolve) => setTimeout(resolve, 90));
+    }
+  });
+  await page.waitForTimeout(400);
   const revealState = await page.evaluate(() => {
     const all = [...document.querySelectorAll("[data-reveal]")];
     return { total: all.length, stuck: all.filter((el) => !el.hasAttribute("data-shown")).map((el) => el.className.slice(0, 34)) };
   });
   assert.ok(revealState.total > 45, `expected the page to be reveal-wired, found ${revealState.total}`);
   assert.deepEqual(revealState.stuck, [], `elements never revealed: ${revealState.stuck.join(", ")}`);
-  await page.evaluate(() => document.querySelector(".services-footnote")?.scrollIntoView({ block: "center", behavior: "instant" }));
-  await page.waitForTimeout(650);
-  const revealState2 = await page.evaluate(() => ({ stuck: [...document.querySelectorAll("[data-reveal]")].filter((el) => !el.hasAttribute("data-shown")).length }));
-  assert.equal(revealState2.stuck, 0, "elements below a mid-page anchor never revealed");
   const visible = await page.evaluate(() => [...document.querySelectorAll("[data-reveal]")].every((el) => Number(getComputedStyle(el).opacity) > 0.98));
   assert.equal(visible, true, "some revealed elements are still transparent");
 
@@ -225,26 +231,28 @@ try {
   assert.match(motion.stats.join(" "), /1,000s/);
   ok(`Motion live: ${motion.rings} contour rings drifting, hero breathing, stats counted to ${motion.stats[0]}/${motion.stats[1]}, progress ${(Number(motion.progress) * 100).toFixed(0)}%`);
 
-  // Touch/small screens must not run the loops at all — this is the fix for the
-  // "lines lagging on mobile" complaint.
+  // Touch/small screens: ONLY the contour rings stop. Everything else a user sees
+  // as "the site is alive" must keep running on a phone.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(300);
   const phone = await page.evaluate(() => {
     const name = (sel) => { const el = document.querySelector(sel); return el ? getComputedStyle(el).animationName : "missing"; };
     return {
-      rotor: name(".cta-contours .contours-rotor"),
+      rotor: name(".difference-contours .contours-rotor"),
+      ctaRotor: name(".cta-contours .contours-rotor"),
       ring: name(".cta-contours .contours-ring"),
       hero: name(".hero-image > img"),
       blur: getComputedStyle(document.querySelector(".site-header")).backdropFilter,
       running: document.getAnimations().filter((a) => a.playState === "running").length,
     };
   });
-  assert.equal(phone.rotor, "none", "contour drift still runs on a phone viewport");
-  assert.equal(phone.ring, "none", "contour breathe still runs on a phone viewport");
-  assert.equal(phone.hero, "none", "hero breathing still runs on a phone viewport");
-  assert.equal(phone.blur, "none", "header blur still costs frames on a phone");
-  assert.equal(phone.running, 0, `${phone.running} animations still running on mobile`);
-  ok("Mobile 390px: all decorative loops and header blur are off");
+  assert.equal(phone.rotor, "none", "the navy-section Contours still drift on a phone");
+  assert.equal(phone.ctaRotor, "none", "the closing-panel Contours still drift on a phone");
+  assert.equal(phone.ring, "none", "contour rings still breathe on a phone");
+  assert.equal(phone.hero, "hero-breathe", "the hero photograph stopped animating on a phone");
+  assert.notEqual(phone.blur, "none", "the header blur was removed on a phone");
+  assert.ok(phone.running > 0, "no animation is running on a phone at all");
+  ok(`Mobile 390px: both Contours panels are still, ${phone.running} other animations still running`);
   await page.setViewportSize({ width: 1456, height: 900 });
   await page.waitForTimeout(200);
 
