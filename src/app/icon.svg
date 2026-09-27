@@ -51,6 +51,15 @@
       }
       @keyframes aq-trace { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -180; } }
 
+      /* Touch devices: a looping repaint inside a sticky header costs frames on a
+         phone, and hover states stick there anyway. Phones and tablets get the still
+         mark; laptops and desktops keep the motion. A width query cannot be used here
+         because an SVG rendered as an image sees its own 33px box, not the page. */
+      @media (pointer: coarse), (hover: none) {
+        .aq-breathe, .aq-sweep, .aq-leaf, .aq-rim, .aq-glint { animation: none; }
+        .aq-rim { stroke-dasharray: none; }
+      }
+
       @media (prefers-reduced-motion: reduce) {
         .aq-breathe, .aq-sweep, .aq-leaf, .aq-rim, .aq-glint { animation: none; }
         .aq-rim { stroke-dasharray: none; }

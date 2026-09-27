@@ -859,3 +859,16 @@ h1 > span { display: block; white-space: nowrap; }
   .button::after { display: none; }
   .service-card:hover, .work-tile:hover { transform: none; }
 }
+
+/* ── Mobile / touch performance ────────────────────────────────────────
+   Phones do not need to repaint the contour lines, the hero zoom or the button
+   sheen 60 times a second, and :hover lifts get stuck on touch. Motion that
+   carries meaning (the one-shot reveal) stays; loops stop. */
+@media (max-width: 860px), ((pointer: coarse) and (hover: none)) {
+  .contours-rotor, .contours-ring, .hero-image > img, .faq-answer { animation: none !important; }
+  .site-header { backdrop-filter: none; background: #f8f9f6; }
+  .button::after { display: none; }
+  .service-card:hover, .work-tile:hover { transform: none; box-shadow: none; }
+  .service-card, .work-tile { transition: none; }
+  .service-card:hover .service-image img, .work-tile:hover > img { transform: none; }
+}

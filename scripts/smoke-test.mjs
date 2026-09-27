@@ -194,9 +194,12 @@ try {
   const visible = await page.evaluate(() => [...document.querySelectorAll("[data-reveal]")].every((el) => Number(getComputedStyle(el).opacity) > 0.98));
   assert.equal(visible, true, "some revealed elements are still transparent");
 
+  // Motion is desktop-only by design, so measure it at a desktop width first.
+  await page.setViewportSize({ width: 1456, height: 900 });
+  await page.waitForTimeout(250);
   // Motion state is only meaningful mid-page: scroll to 60% and let the
   // rAF-throttled listener run before reading --scroll and the compact header.
-  await page.evaluate(() => window.scrollTo(0, Math.round(document.documentElement.scrollHeight * 0.6)));
+  await page.evaluate(() => document.documentElement.scrollTo({ top: Math.round(document.documentElement.scrollHeight * 0.6), behavior: "instant" }));
   await page.waitForTimeout(400);
   const motion = await page.evaluate(() => {
     const ring = document.querySelector(".contours-ring");
@@ -221,6 +224,29 @@ try {
   assert.match(motion.stats.join(" "), /8\+/);
   assert.match(motion.stats.join(" "), /1,000s/);
   ok(`Motion live: ${motion.rings} contour rings drifting, hero breathing, stats counted to ${motion.stats[0]}/${motion.stats[1]}, progress ${(Number(motion.progress) * 100).toFixed(0)}%`);
+
+  // Touch/small screens must not run the loops at all — this is the fix for the
+  // "lines lagging on mobile" complaint.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(300);
+  const phone = await page.evaluate(() => {
+    const name = (sel) => { const el = document.querySelector(sel); return el ? getComputedStyle(el).animationName : "missing"; };
+    return {
+      rotor: name(".cta-contours .contours-rotor"),
+      ring: name(".cta-contours .contours-ring"),
+      hero: name(".hero-image > img"),
+      blur: getComputedStyle(document.querySelector(".site-header")).backdropFilter,
+      running: document.getAnimations().filter((a) => a.playState === "running").length,
+    };
+  });
+  assert.equal(phone.rotor, "none", "contour drift still runs on a phone viewport");
+  assert.equal(phone.ring, "none", "contour breathe still runs on a phone viewport");
+  assert.equal(phone.hero, "none", "hero breathing still runs on a phone viewport");
+  assert.equal(phone.blur, "none", "header blur still costs frames on a phone");
+  assert.equal(phone.running, 0, `${phone.running} animations still running on mobile`);
+  ok("Mobile 390px: all decorative loops and header blur are off");
+  await page.setViewportSize({ width: 1456, height: 900 });
+  await page.waitForTimeout(200);
 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.reload({ waitUntil: "networkidle" });
