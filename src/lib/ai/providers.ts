@@ -28,17 +28,21 @@ export const PROVIDER_DEFS: Record<string, ProviderDef> = {
     url: "https://api.groq.com/openai/v1/chat/completions",
     keyEnv: "GROQ_API_KEY",
     modelEnv: "GROQ_MODEL",
-    defaultModels: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"],
+    // groq retired the llama-3.3 slugs this template shipped with; gpt-oss is what
+    // this key can actually call, and it answers in `content` with reasoning separate.
+    defaultModels: ["openai/gpt-oss-120b", "openai/gpt-oss-20b"],
   },
   openrouter: {
     label: "OpenRouter",
     url: "https://openrouter.ai/api/v1/chat/completions",
     keyEnv: "OPENROUTER_API_KEY",
     modelEnv: "OPENROUTER_MODEL",
+    // Every ":free" slug this template shipped with is now unavailable for free
+    // accounts; these two answer in plain content instead of silently returning "".
     defaultModels: [
-      "meta-llama/llama-3.3-70b-instruct:free",
-      "deepseek/deepseek-chat-v3.1:free",
-      "qwen/qwen3-235b-a22b:free",
+      "google/gemma-4-26b-a4b-it:free",
+      "google/gemma-4-31b-it:free",
+      "apodex/apodex-1.1-mini:free",
     ],
     extraHeaders: () => ({
       // Optional but recommended by OpenRouter for attribution.
@@ -159,7 +163,10 @@ export async function fetchCompletion(
       messages,
       stream: true,
       temperature: 0.4,
-      max_tokens: 600,
+      // Reasoning models (gpt-oss) spend part of the budget on hidden reasoning before
+      // any content appears; 600 could come back with an empty answer, which reads as
+      // "the bot is broken". 1200 leaves room for both.
+      max_tokens: 1200,
     }),
   });
 
