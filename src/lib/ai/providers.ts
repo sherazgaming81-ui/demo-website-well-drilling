@@ -7,88 +7,53 @@ export type Attempt = {
   key: string;
   model: string;
   headers: Record<string, string>;
+  /** Merged into the request body — used to turn the model's chain of thought off. */
+  extraBody: Record<string, unknown>;
 };
 
 type ProviderDef = {
   label: string;
-  url: string;
+  /** Overridable so a self-hosted or proxied gateway can be used without a code change. */
+  baseEnv: string;
+  defaultBase: string;
   keyEnv: string;
   modelEnv: string;
   defaultModels: string[];
-  extraHeaders?: (key: string) => Record<string, string>;
+  extraBody?: () => Record<string, unknown>;
 };
 
 /**
- * Default order is speed-first, then breadth, then free-tier depth.
- * Override entirely with AI_PROVIDER_CHAIN.
+ * One brain: the Dahl Inference gateway (OpenAI-compatible, free tier — the first
+ * 100M tokens). The other providers this template shipped with (Groq, OpenRouter,
+ * Gemini, Cerebras, Together, DeepInfra) are gone: every slug they defaulted to was
+ * retired or paywalled, so every question burned 8 dead attempts before falling back.
+ *
+ * The three models below are what GET https://inference.dahl.global/v1/models returns,
+ * in priority order — deepseek first, as asked. Because they are tried in sequence,
+ * one model being overloaded is still not a dead end.
  */
 export const PROVIDER_DEFS: Record<string, ProviderDef> = {
-  groq: {
-    label: "Groq",
-    url: "https://api.groq.com/openai/v1/chat/completions",
-    keyEnv: "GROQ_API_KEY",
-    modelEnv: "GROQ_MODEL",
-    // groq retired the llama-3.3 slugs this template shipped with; gpt-oss is what
-    // this key can actually call, and it answers in `content` with reasoning separate.
-    defaultModels: ["openai/gpt-oss-120b", "openai/gpt-oss-20b"],
-  },
-  openrouter: {
-    label: "OpenRouter",
-    url: "https://openrouter.ai/api/v1/chat/completions",
-    keyEnv: "OPENROUTER_API_KEY",
-    modelEnv: "OPENROUTER_MODEL",
-    // Every ":free" slug this template shipped with is now unavailable for free
-    // accounts; these two answer in plain content instead of silently returning "".
+  dahl: {
+    label: "Dahl Inference",
+    baseEnv: "DAHL_BASE_URL",
+    defaultBase: "https://inference.dahl.global/v1",
+    keyEnv: "DAHL_API_KEY",
+    modelEnv: "DAHL_MODEL",
     defaultModels: [
-      "google/gemma-4-26b-a4b-it:free",
-      "google/gemma-4-31b-it:free",
-      "apodex/apodex-1.1-mini:free",
+      "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "MiniMaxAI/MiniMax-M2.7",
+      "zai-org/GLM-5.3-Flash",
     ],
-    extraHeaders: () => ({
-      // Optional but recommended by OpenRouter for attribution.
-      "HTTP-Referer": process.env.SITE_URL || "https://aquiferreachllc.vercel.app",
-      "X-Title": "Aquifer Reach LLC",
+    extraBody: () => ({
+      // Verified against the live API: with this flag the response has no `reasoning`
+      // field at all, so nothing can leak into the chat and no tokens are wasted on it.
+      chat_template_kwargs: { thinking: false },
+      enable_thinking: false,
     }),
-  },
-  gemini: {
-    label: "Google Gemini",
-    url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-    keyEnv: "GEMINI_API_KEY",
-    modelEnv: "GEMINI_MODEL",
-    // Verified live: 2.5-flash, flash-latest and flash-lite all exist on this key.
-    defaultModels: ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"],
-  },
-  cerebras: {
-    label: "Cerebras",
-    url: "https://api.cerebras.ai/v1/chat/completions",
-    keyEnv: "CEREBRAS_API_KEY",
-    modelEnv: "CEREBRAS_MODEL",
-    defaultModels: ["llama-3.3-70b"],
-  },
-  together: {
-    label: "Together AI",
-    url: "https://api.together.xyz/v1/chat/completions",
-    keyEnv: "TOGETHER_API_KEY",
-    modelEnv: "TOGETHER_MODEL",
-    defaultModels: ["meta-llama/Llama-3.3-70B-Instruct-Turbo"],
-  },
-  deepinfra: {
-    label: "DeepInfra",
-    url: "https://api.deepinfra.com/v1/openai/chat/completions",
-    keyEnv: "DEEPINFRA_API_KEY",
-    modelEnv: "DEEPINFRA_MODEL",
-    defaultModels: ["meta-llama/Llama-3.3-70B-Instruct"],
-  },
-  custom: {
-    label: "Custom endpoint",
-    url: "",
-    keyEnv: "CUSTOM_AI_KEY",
-    modelEnv: "CUSTOM_AI_MODEL",
-    defaultModels: [],
   },
 };
 
-const DEFAULT_CHAIN = "groq,openrouter,gemini,cerebras,together,deepinfra";
+const DEFAULT_CHAIN = "dahl";
 
 function modelList(def: ProviderDef): string[] {
   const raw = process.env[def.modelEnv];
@@ -113,28 +78,25 @@ export function resolveAttempts(): Attempt[] {
     const key = process.env[def.keyEnv]?.trim();
     if (!key) continue;
 
-    const url = id === "custom" ? process.env.CUSTOM_AI_BASE_URL?.trim() : def.url;
-    if (!url) continue;
+    const base = (process.env[def.baseEnv]?.trim() || def.defaultBase).replace(/\/+$/, "");
+    if (!base) continue;
 
     for (const model of modelList(def)) {
       attempts.push({
         provider: id,
         label: def.label,
-        url,
+        url: `${base}/chat/completions`,
         key,
         model,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${key}`,
-          ...(def.extraHeaders ? def.extraHeaders(key) : {}),
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+        extraBody: def.extraBody ? def.extraBody() : {},
       });
     }
   }
   return attempts;
 }
 
-/** True when at least one provider is configured (used for health checks). */
+/** True when at least one model is configured (used for health checks). */
 export function hasLiveProvider(): boolean {
   return resolveAttempts().length > 0;
 }
@@ -145,9 +107,9 @@ export type StreamHandlers = {
 };
 
 /**
- * Fire one streaming completion. Throws with a readable message when the
- * provider rejects the attempt, so the caller can move to the next one.
- * The caller owns the AbortSignal.
+ * Fire one streaming completion. Throws with a readable message when the gateway
+ * rejects the attempt, so the caller can move to the next model. The caller owns
+ * the AbortSignal.
  */
 export async function fetchCompletion(
   attempt: Attempt,
@@ -163,10 +125,10 @@ export async function fetchCompletion(
       messages,
       stream: true,
       temperature: 0.4,
-      // Reasoning models (gpt-oss) spend part of the budget on hidden reasoning before
-      // any content appears; 600 could come back with an empty answer, which reads as
-      // "the bot is broken". 1200 leaves room for both.
+      // The gateway spends this budget on `content` only (thinking is disabled above),
+      // so ~1200 tokens is far more than an answer needs while still bounding cost.
       max_tokens: 1200,
+      ...attempt.extraBody,
     }),
   });
 
@@ -179,7 +141,10 @@ export async function fetchCompletion(
 
 /**
  * Parse an OpenAI-style SSE stream and hand each text delta to the caller.
- * Providers differ slightly, so every shape is tolerated.
+ *
+ * Only `delta.content` is ever surfaced. `delta.reasoning`, `reasoning_content`,
+ * and `thinking` are deliberately ignored — that is the model's chain of thought and
+ * a visitor must never see it, even if a gateway starts sending it again.
  */
 export async function readStream(
   body: ReadableStream<Uint8Array>,
@@ -206,11 +171,11 @@ export async function readStream(
 
       try {
         const parsed = JSON.parse(payload) as {
-          choices?: { delta?: { content?: string }; message?: { content?: string }; text?: string }[];
+          choices?: { delta?: Record<string, unknown>; message?: Record<string, unknown> }[];
         };
         const choice = parsed.choices?.[0];
-        const text = choice?.delta?.content ?? choice?.message?.content ?? choice?.text ?? "";
-        if (text) handlers.onDelta(text);
+        const text = (choice?.delta?.content ?? choice?.message?.content ?? "") as unknown;
+        if (typeof text === "string" && text) handlers.onDelta(text);
       } catch {
         // Ignore keep-alives and provider-specific noise.
       }

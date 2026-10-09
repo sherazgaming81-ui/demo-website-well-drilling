@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { buildMessages, offlineAnswer } from "@/lib/ai/brain";
 import { openingStep, stepFlow, wantsToBook, type FlowSession } from "@/lib/ai/booking-flow";
 import { fetchCompletion, readStream, resolveAttempts, type Attempt } from "@/lib/ai/providers";
+import { sanitizeAnswer } from "@/lib/ai/sanitize";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -305,11 +306,23 @@ export async function POST(request: NextRequest) {
           streamController.enqueue(
             event({ type: "start", provider: attempt.label, model: attempt.model }),
           );
+          let streamed = "";
           try {
             await readStream(upstream.body as ReadableStream<Uint8Array>, {
-              onDelta: (text) => streamController.enqueue(event({ type: "delta", text })),
+              onDelta: (text) => {
+                streamed += text;
+                streamController.enqueue(event({ type: "delta", text }));
+              },
               onDone: () => {},
             });
+            // A model can break the two rules that matter for this business: quoting a
+            // price, and narrating its reasoning. Stream first for speed, then replace
+            // the bubble with a version that never shows a figure or a thought trail.
+            const clean = sanitizeAnswer(streamed);
+            if (clean.changed) {
+              streamController.enqueue(event({ type: "replace", text: clean.text }));
+              console.warn(`[chat] sanitised ${attempt.model}: ${clean.violations.join(", ") || "formatting"}`);
+            }
             streamController.enqueue(event({ type: "done", fallback: false }));
           } catch (error) {
             // The provider died mid-answer. Keep whatever was already streamed

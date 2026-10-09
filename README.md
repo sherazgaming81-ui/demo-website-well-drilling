@@ -70,6 +70,27 @@ Motion is deliberately light and skippable — nothing depends on it to be reada
 
 If you want less motion, delete the `/* ── Motion ── */` block at the end of `src/app/globals.css`; the markup keeps working because `[data-reveal]` alone does nothing without those rules.
 
+### Assistant brain
+
+One provider: the **Dahl Inference** gateway (OpenAI-compatible, free tier — the first
+100M tokens). `GET https://inference.dahl.global/v1/models` is the source of the slug
+list; the code defaults to the three models it returns, in order:
+
+1. `deepseek-ai/DeepSeek-V4-Flash-0731`
+2. `MiniMaxAI/MiniMax-M2.7`
+3. `zai-org/GLM-5.3-Flash`
+
+Set `DAHL_API_KEY` (required) and optionally `DAHL_MODEL` / `DAHL_BASE_URL` /
+`AI_PROVIDER_CHAIN`. With no key the assistant runs on the offline knowledge base,
+which can still take a booking.
+
+Two guards exist because a model on its own breaks them: requests carry
+`chat_template_kwargs: { thinking: false }` so the gateway never sends reasoning, and
+`src/lib/ai/sanitize.ts` replaces any invented price figure with the company's honest
+"we don't quote before seeing the property" line and strips markdown the plain-text
+bubble cannot render. The answer streams first and is replaced at the end only when it
+had to be corrected.
+
 ## Checks
 
 ```bash

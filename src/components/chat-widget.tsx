@@ -173,8 +173,12 @@ export function ChatWidget({ onBook, variant = "floating" }: { onBook: (serviceI
               booked?: { reference: string };
             };
 
-            if (payload.type === "delta" && payload.text) {
-              updateLast((turn) => ({ ...turn, content: turn.content + payload.text }));
+            const piece = payload.text;
+            if (payload.type === "delta" && piece) {
+              updateLast((turn) => ({ ...turn, content: turn.content + piece }));
+            } else if (payload.type === "replace" && piece) {
+              // Authoritative final text from the server: price-free, no reasoning.
+              updateLast(() => ({ role: "assistant", content: piece }));
             } else if (payload.type === "error" && payload.message) {
               updateLast((turn) => ({ ...turn, error: true }));
             } else if (payload.type === "booking") {
