@@ -225,6 +225,51 @@ try {
   assert.match(bookedRef, /^AQ-[A-F0-9]{8}$/, `chat did not return a reference (got "${bookedRef}")`);
   ok(`Assistant booked an estimate on its own — reference ${bookedRef}`);
 
+  // Stability: the box must not jump when a long reply arrives or the chip row
+  // appears and disappears — that shift is what read as "unstable" on a PC.
+  const box = () =>
+    page.evaluate(() => {
+      const r = document.querySelector(".chat-panel").getBoundingClientRect();
+      const log = document.querySelector(".chat-log");
+      return {
+        top: Math.round(r.top), left: Math.round(r.left), w: Math.round(r.width), h: Math.round(r.height),
+        logPad: Math.round(log.getBoundingClientRect().width), gutter: getComputedStyle(log).scrollbarGutter,
+      };
+    });
+  const beforeBox = await box();
+  await page.getByRole("textbox", { name: "Your question" }).fill("Tell me in detail how a new screen well works in Florida sand, step by step.");
+  await page.getByRole("button", { name: "Send your question" }).click();
+  await page.waitForFunction(() => { const el = [...document.querySelectorAll(".chat-row-assistant .chat-bubble")].pop(); return el && el.textContent.trim().length > 120 && !document.querySelector(".chat-typing"); }, null, { timeout: 60000 });
+  const afterLong = await box();
+
+  await page.getByRole("textbox", { name: "Your question" }).fill("ok book me");
+  await page.getByRole("button", { name: "Send your question" }).click();
+  await page.waitForFunction(() => Boolean(document.querySelector(".chat-chips.is-flow")), null, { timeout: 40000 });
+  const withChips = await box();
+  const meterSeen = await page.locator(".chat-meter i").count();
+
+  await page.getByRole("button", { name: "New screen well" }).click();
+  await page.waitForFunction(() => !document.querySelector(".chat-typing"), null, { timeout: 40000 });
+  await page.getByRole("textbox", { name: "Your question" }).fill("cancel");
+  await page.getByRole("button", { name: "Send your question" }).click();
+  // the meter disappears when the flow ends; the "Start over" chip stays by design
+  await page.waitForFunction(() => !document.querySelector(".chat-meter"), null, { timeout: 40000 });
+  const cancelledText = await page.locator(".chat-row-assistant .chat-bubble").last().innerText();
+  assert.match(cancelledText, /nothing was saved|nothing is saved/i, `cancel said: ${cancelledText.slice(0, 90)}`);
+  const afterCancel = await box();
+
+  const states = [["a long reply", afterLong], ["the chip row and meter", withChips], ["cancelling the flow", afterCancel]];
+  for (const [name, state] of states) {
+    assert.equal(state.top, beforeBox.top, `panel top moved ${state.top - beforeBox.top}px after ${name}`);
+    assert.equal(state.h, beforeBox.h, `panel height changed ${state.h - beforeBox.h}px after ${name}`);
+    assert.equal(state.left, beforeBox.left, `panel shifted horizontally after ${name}`);
+    assert.equal(state.w, beforeBox.w, `panel width changed after ${name}`);
+    assert.equal(state.logPad, beforeBox.logPad, `text column re-flowed after ${name}`);
+  }
+  assert.ok(meterSeen >= 10, `expected a 10-segment meter, saw ${meterSeen}`);
+  assert.match(beforeBox.gutter, /stable/, "scrollbar gutter is not reserved, so text shifts when the bar appears");
+  ok(`Panel holds still on desktop: ${beforeBox.w}×${beforeBox.h}px through a long reply, the chip row and a cancel — no shift at all`);
+
   // Desktop must not be cramped or cut off any more.
   const geometry = await page.evaluate(() => {
     const panel = document.querySelector(".chat-panel");

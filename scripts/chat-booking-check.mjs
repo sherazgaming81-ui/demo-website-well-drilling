@@ -102,5 +102,9 @@ check("cancel ends the flow and says nothing was saved", /nothing was saved|drop
 const emptyStart = await rawTurn({ sessionId: crypto.randomUUID(), startBooking: true, messages: [] });
 check("startBooking works with no history at all", emptyStart.includes('"stage":"service"'), emptyStart.slice(0, 60));
 
+// a finished flow must still accept a new booking typed in plain text
+const again = await turn("book me another visit");
+check("re-booking after a completed flow starts a fresh one", again.booking?.stage === "service" || again.booking?.stage === "zip", `stage=${again.booking?.stage ?? "chat"}`);
+
 console.log(`\n${fails === 0 ? "CHAT BOOKING: all checks passed" : `${fails} CHECK(S) FAILED`}`);
 process.exit(fails === 0 ? 0 : 1);

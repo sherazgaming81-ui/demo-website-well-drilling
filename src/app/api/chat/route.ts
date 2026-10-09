@@ -262,7 +262,10 @@ export async function POST(request: NextRequest) {
     return flowStream(await stepFlow(activeFlow, lastUser), sessionId);
   }
   const restarting = /^\s*(start over|start again)\s*$/i.test(lastUser);
-  if (wantsFlow || restarting || (!activeFlow && wantsToBook(lastUser))) {
+  // A finished flow must not lock the visitor out of starting another one: once the
+  // booking is done, a fresh "book me" opens a new flow instead of chatting at them.
+  const canOpenFlow = !activeFlow || activeFlow.stage === "done";
+  if (wantsFlow || restarting || (canOpenFlow && wantsToBook(lastUser))) {
     return flowStream(openingStep(wantsFlow || restarting ? null : lastUser), sessionId);
   }
 

@@ -1004,3 +1004,54 @@ h1 > span { display: block; white-space: nowrap; }
   .chat-panel.is-page { border-radius: 16px; height: min(680px, calc(100dvh - 190px)); }
   .chat-page-head h1 { font-size: 24px; }
 }
+
+/* ── Site assistant: desktop comfort pass ─────────────────────────────
+   Reported as cramped and jittery on PC. Two real causes, both fixed:
+   1. the panel was sized by its own content, so every reply, chip row or
+      error moved its top edge mid-read. It now has a fixed height with a
+      floor, and the conversation scrolls inside it instead.
+   2. the scrollbar appeared and vanished, re-flowing the bubbles beside it.
+      The gutter is reserved, so text never shifts.
+   Padding, row gap, line-height and bubble width are re-tuned for a desktop
+   box; the phone sheet below 768px is untouched. */
+@media (min-width: 1100px) {
+  .chat-panel {
+    width: min(600px, calc(100vw - 72px));
+    height: min(704px, calc(100dvh - 140px));
+    max-height: min(704px, calc(100dvh - 140px));
+    min-height: 520px;
+    right: 32px; bottom: 32px;
+    border-radius: 20px;
+    contain: layout paint;
+  }
+  .chat-head { padding: 18px 24px; gap: 12px; }
+  .chat-head-text strong { font-size: 16px; letter-spacing: -.2px; }
+  .chat-head-text span { font-size: 12px; }
+  .chat-meter { padding: 12px 24px 0; gap: 5px; }
+  .chat-log { padding: 20px 24px 14px; gap: 14px; scrollbar-gutter: stable; scrollbar-width: thin; }
+  .chat-bubble { max-width: 78%; padding: 13px 17px; font-size: 15px; line-height: 1.75; border-radius: 16px; }
+  .chat-chips, .chat-chips.is-flow { min-height: 56px; padding: 8px 24px 14px; gap: 8px; align-content: start; }
+  .chat-chips button { font-size: 12px; padding: 9px 14px; }
+  .chat-actions { padding: 14px 24px; gap: 16px; }
+  .chat-input { padding: 14px 24px; }
+  .chat-input input { font-size: 15px; line-height: 1.5; padding: 14px 16px; border-radius: 12px; }
+  .chat-disclosure { padding: 0 24px 18px; font-size: 11px; line-height: 1.75; }
+  .chat-booked-card { margin: 6px 4px 2px; padding: 18px 20px 20px; }
+  /* the launcher sits exactly under the open panel and only adds clutter —
+     the header already has a close button, and Escape still works */
+  .chat-launcher.is-open { display: none; }
+}
+
+/* short laptop screens: keep it on screen, still a fixed box */
+@media (min-width: 1100px) and (max-height: 880px) {
+  .chat-panel { height: calc(100dvh - 72px); max-height: calc(100dvh - 72px); min-height: 0; }
+}
+
+/* in-between windows (small laptops, split screens) get the same stability */
+@media (min-width: 768px) and (max-width: 1099px) {
+  .chat-panel { width: min(468px, calc(100vw - 48px)); height: min(620px, calc(100dvh - 120px)); min-height: 420px; }
+  .chat-log { padding: 18px 18px 10px; gap: 12px; scrollbar-gutter: stable; }
+  .chat-bubble { max-width: 82%; font-size: 14.5px; line-height: 1.7; padding: 12px 15px; }
+  .chat-chips, .chat-chips.is-flow { min-height: 50px; }
+  .chat-launcher.is-open { display: none; }
+}
