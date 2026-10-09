@@ -886,8 +886,8 @@ h1 > span { display: block; white-space: nowrap; }
 
 .chat-panel {
   position: fixed; right: 26px; bottom: 96px; z-index: 61;
-  width: min(392px, calc(100vw - 52px));
-  max-height: min(640px, calc(100dvh - 140px));
+  width: min(432px, calc(100vw - 48px));
+  max-height: min(712px, calc(100dvh - 120px));
   display: flex; flex-direction: column; overflow: hidden;
   background: var(--paper); border: 1px solid #dfe5dd; border-radius: 18px;
   box-shadow: 0 26px 60px #0d20304a, 0 4px 12px #0d20301a;
@@ -903,10 +903,10 @@ h1 > span { display: block; white-space: nowrap; }
 .chat-head-close { width: 32px; height: 32px; border-radius: 50%; color: #cfe0e8; }
 .chat-head-close:hover { background: #ffffff1a; color: white; }
 
-.chat-log { flex: 1; overflow-y: auto; padding: 16px 14px 6px; display: flex; flex-direction: column; gap: 10px; scrollbar-width: thin; }
+.chat-log { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 16px 16px 10px; display: flex; flex-direction: column; gap: 10px; scrollbar-width: thin; }
 .chat-row { display: flex; }
 .chat-row-user { justify-content: flex-end; }
-.chat-bubble { max-width: 86%; padding: 11px 14px; border-radius: 14px; font-size: 13.5px; line-height: 1.55; white-space: pre-wrap; }
+.chat-bubble { max-width: 88%; padding: 11px 14px; border-radius: 14px; font-size: 14px; line-height: 1.62; white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-row-assistant .chat-bubble { background: white; border: 1px solid var(--line); border-bottom-left-radius: 5px; color: var(--ink); }
 .chat-row-user .chat-bubble { background: var(--blue); color: white; border-bottom-right-radius: 5px; }
 .chat-row.is-error .chat-bubble { background: #fff6f6; border-color: #f3d4d4; color: #8d2f2f; }
@@ -950,4 +950,57 @@ h1 > span { display: block; white-space: nowrap; }
 
 @media (prefers-reduced-motion: reduce) {
   .chat-launcher, .chat-launcher.is-nudging, .chat-panel, .chat-actions .chat-book.is-highlighted, .chat-typing i { animation: none !important; }
+}
+
+/* Bigger, calmer desktop shell for the assistant — the 392px box was cutting long
+   answers, which is what it was reported as on a laptop. */
+@media (min-width: 1100px) {
+  .chat-panel { width: min(524px, calc(100vw - 64px)); max-height: min(792px, calc(100dvh - 84px)); }
+  .chat-panel .chat-bubble { font-size: 14.5px; line-height: 1.68; }
+  .chat-panel .chat-head { padding: 17px 16px; }
+  .chat-head-text strong { font-size: 15px; }
+  .chat-head-text span { font-size: 11.5px; }
+  .chat-panel .chat-input { padding: 14px 16px; }
+  .chat-panel .chat-input input { font-size: 14px; padding: 13px 15px; }
+}
+
+.chat-head-expand { width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #cfe0e8; flex-shrink: 0; }
+.chat-head-expand:hover { background: #ffffff1a; color: white; }
+
+/* guided booking progress: ten tiny segments, filled as the flow moves */
+.chat-meter { display: flex; gap: 4px; padding: 10px 16px 0; }
+.chat-meter i { flex: 1; height: 3px; border-radius: 2px; background: #dbe3dd; transition: background .3s; }
+.chat-meter i.is-done { background: var(--blue); }
+
+.chat-chips.is-flow { padding-top: 10px; padding-bottom: 12px; }
+.chat-chips.is-flow button { border-color: #b9cdf3; background: #f4f8ff; color: #1b4fa8; }
+
+.chat-booked-card { margin: 4px 2px 2px; padding: 15px 16px 16px; border-radius: 14px; background: var(--navy); color: #e8f1f5; display: flex; flex-direction: column; gap: 6px; }
+.chat-booked-eyebrow { font-size: 8.5px; letter-spacing: 1.5px; font-weight: 700; color: #86b0ff; }
+.chat-booked-ref { font-size: 24px; letter-spacing: -.6px; font-weight: 600; color: white; }
+.chat-booked-card p { font-size: 12px; line-height: 1.7; color: #a8b9bc; }
+.chat-booked-call { display: inline-flex; align-items: center; gap: 7px; margin-top: 6px; font-size: 12px; font-weight: 650; color: #cfe0e8; }
+.chat-booked-call:hover { color: white; }
+
+/* The dedicated page: same component, room to breathe on every screen. */
+.chat-page-wrap { padding: 26px 0 40px; }
+.chat-page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.chat-page-head h1 { font-size: 30px; letter-spacing: -1.2px; margin: 0; font-weight: 600; }
+.chat-page-head p { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
+.chat-page-back { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 650; color: var(--blue); white-space: nowrap; }
+.chat-page-back:hover { color: var(--blue-dark); }
+.chat-page { display: flex; justify-content: center; padding: 0 0 8px; }
+.chat-panel.is-page { position: static; width: min(760px, 100%); max-height: none; height: min(760px, calc(100dvh - 210px)); border-radius: 18px; animation: none; }
+.chat-panel.is-page .chat-log { padding-inline: 20px; }
+.chat-panel.is-page .chat-bubble { font-size: 15px; line-height: 1.7; max-width: 78%; }
+.chat-panel.is-page .chat-head { padding: 20px 22px; }
+.chat-panel.is-page .chat-head-text strong { font-size: 17px; }
+.chat-panel.is-page .chat-head-text span { font-size: 12px; }
+.chat-panel.is-page .chat-input { padding: 16px 20px; }
+.chat-panel.is-page .chat-input input { font-size: 15px; padding: 14px 16px; }
+.chat-panel.is-page .chat-disclosure { padding-inline: 20px; }
+
+@media (max-width: 700px) {
+  .chat-panel.is-page { border-radius: 16px; height: min(680px, calc(100dvh - 190px)); }
+  .chat-page-head h1 { font-size: 24px; }
 }

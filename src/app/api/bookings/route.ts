@@ -1,50 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID } from "node:crypto";
-import { bookingServices } from "@/lib/site-data";
-import { validateBooking, type BookingFields } from "@/lib/booking";
+import { createBooking } from "@/lib/booking-store";
+import type { BookingFields } from "@/lib/booking";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Lead handling without a database.
- * Every request is kept in this process for the dedupe/rate-limit window, and —
- * when LEAD_WEBHOOK_URL is configured — forwarded to the owner's inbox or CRM.
- * A failing forward never blocks the customer's confirmation.
+ * POST { service, zip, preferredDate, timePreference, fullName, email, phone,
+ *        notes, consent, website, requestId }
+ *
+ * All rules live in src/lib/booking-store.ts so the chat assistant books through
+ * exactly the same path as this form. This file only handles the HTTP layer.
  */
-type StoredBooking = { id: string; email: string; createdAt: number };
-
-const MAX_ENTRIES = 500;
-const WINDOW_MS = 60 * 60 * 1000; // one hour, as the rate limit message promises
-const MAX_PER_EMAIL_PER_WINDOW = 5;
-
-const globalForStore = globalThis as typeof globalThis & {
-  __leadStoreByRequest?: Map<string, StoredBooking>;
-  __leadStoreByEmail?: Map<string, number[]>;
-};
-
-const byRequestId = (globalForStore.__leadStoreByRequest ??= new Map<string, StoredBooking>());
-const byEmail = (globalForStore.__leadStoreByEmail ??= new Map<string, number[]>());
-
-function prune() {
-  const cutoff = Date.now() - WINDOW_MS;
-  for (const [key, times] of byEmail) {
-    const kept = times.filter((time) => time > cutoff);
-    if (kept.length) byEmail.set(key, kept);
-    else byEmail.delete(key);
-  }
-  while (byRequestId.size > MAX_ENTRIES) {
-    const oldest = byRequestId.keys().next().value;
-    if (oldest === undefined) break;
-    byRequestId.delete(oldest);
-  }
-}
-
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   NextResponse.json(body, { status, headers: { "Cache-Control": "no-store", ...headers } });
-
-const confirmation = (id: string, status = 200) =>
-  json({ ok: true, reference: `AQ-${id.slice(0, 8).toUpperCase()}` }, status);
 
 export async function POST(request: NextRequest) {
   const origin = request.headers.get("origin");
@@ -74,60 +43,14 @@ export async function POST(request: NextRequest) {
     return json({ error: "We couldn't read the form. Please try again." }, 400);
   }
 
-  if (typeof fields.requestId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(fields.requestId)) {
-    return json({ error: "Please reopen the booking form and try again." }, 400);
-  }
-
-  if (fields.website) return json({ error: "We couldn't accept this request." }, 400);
-
-  const errors = validateBooking(fields);
-  if (Object.keys(errors).length) return json({ error: "Please check the highlighted fields.", errors }, 422);
-
-  prune();
-
-  // Idempotent resubmits get the same reference back.
-  const existing = byRequestId.get(fields.requestId);
-  if (existing) return confirmation(existing.id);
-
-  const email = fields.email.trim().toLowerCase();
-  const recent = (byEmail.get(email) ?? []).filter((time) => time > Date.now() - WINDOW_MS);
-  if (recent.length >= MAX_PER_EMAIL_PER_WINDOW) {
+  const result = await createBooking(fields);
+  if (!result.ok) {
     return json(
-      { error: "You've already sent several requests. Please wait an hour before trying again." },
-      429,
-      { "Retry-After": "3600" },
+      { error: result.error, ...(result.errors ? { errors: result.errors } : {}) },
+      result.status,
+      result.status === 429 ? { "Retry-After": String(result.retryAfterSeconds ?? 3600) } : {},
     );
   }
 
-  const id = randomUUID();
-  byRequestId.set(fields.requestId, { id, email, createdAt: Date.now() });
-  recent.push(Date.now());
-  byEmail.set(email, recent);
-
-  const webhook = process.env.LEAD_WEBHOOK_URL?.trim();
-  if (webhook) {
-    const lead = {
-      reference: `AQ-${id.slice(0, 8).toUpperCase()}`,
-      receivedAt: new Date().toISOString(),
-      fullName: fields.fullName.trim(),
-      email,
-      phone: fields.phone.trim(),
-      zip: fields.zip.trim(),
-      service: fields.service,
-      serviceLabel: bookingServices.find((item) => item.value === fields.service)?.label ?? fields.service,
-      preferredDate: fields.preferredDate,
-      timePreference: fields.timePreference,
-      notes: fields.notes.trim(),
-      source: "aquifer-reach-website",
-    };
-    // Fire and forget: the customer already has a valid reference.
-    void fetch(webhook, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(lead),
-      signal: AbortSignal.timeout(5000),
-    }).catch((cause) => console.error("Lead forward failed:", cause instanceof Error ? cause.message : cause));
-  }
-
-  return confirmation(id, 201);
+  return json({ ok: true, reference: result.reference }, result.status);
 }

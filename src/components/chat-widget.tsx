@@ -1,10 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { bookingServices, business } from "@/lib/site-data";
 
 /**
+ * The assistant, in two shells: the floating box on the home page and the full page
+ * at /assistant (the floating box is cramped for long answers on a desktop, and the
+ * page is roomy on any screen).
+ *
  * Sentinels the model may emit are stripped before display:
  *   [[BOOK]]               → highlights the estimate button
  *   [[SERVICE:rock-wells]] → pre-selects that service when the visitor books
@@ -12,9 +17,12 @@ import { bookingServices, business } from "@/lib/site-data";
 
 type ChatTurn = { role: "user" | "assistant"; content: string; error?: boolean };
 
-const GREETING = `Hi — I'm the assistant here. Ask me anything about wells, pumps or water for your property, or about booking the free on-site estimate. How can I help?`;
+type FlowProgress = { stage: string; label: string } | null;
+
+const GREETING = `Hi — I'm the assistant here. Ask me anything about wells, pumps or water for your property. I can also take your estimate request right here in the chat, or you can use the estimate form. How can I help?`;
 
 const SENTINEL = /\[\[(BOOK|SERVICE:([a-z0-9-]+))\]\]/gi;
+const STAGES = ["service", "zip", "date", "time", "name", "email", "phone", "notes", "consent", "confirm"] as const;
 
 function parseSentinels(raw: string): { text: string; book: boolean; service: string | null } {
   let book = false;
@@ -28,32 +36,43 @@ function parseSentinels(raw: string): { text: string; book: boolean; service: st
     })
     // Hide a half-written sentinel while the answer is still streaming.
     .replace(/\[\[[A-Za-z:0-9-]*$/, "")
+    .replace(/\*\*/g, "")
     .replace(/\n{3,}/g, "\n\n")
     .trimEnd();
 
   return { text, book, service };
 }
 
-export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void }) {
-  const [open, setOpen] = useState(false);
+export function ChatWidget({ onBook, variant = "floating" }: { onBook: (serviceId?: string) => void; variant?: "floating" | "page" }) {
+  const [open, setOpen] = useState(variant === "page");
   const [turns, setTurns] = useState<ChatTurn[]>([{ role: "assistant", content: GREETING }]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [provider, setProvider] = useState<string | null>(null);
   const [nudgeBook, setNudgeBook] = useState(false);
   const [serviceHint, setServiceHint] = useState<string | null>(null);
+  const [chips, setChips] = useState<string[]>([]);
+  const [progress, setProgress] = useState<FlowProgress>(null);
+  const [reference, setReference] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const launcherRef = useRef<HTMLButtonElement>(null);
+  // One identity per page view, so the guided booking can be resumed mid-flow and a
+  // repeated "yes" cannot double-book. Never rendered, so SSR/client differ harmlessly.
+  const [sessionId] = useState(() =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
+  );
 
   const scrollToEnd = useCallback(() => {
     const node = logRef.current;
     if (node) node.scrollTop = node.scrollHeight;
   }, []);
 
-  useEffect(scrollToEnd, [turns, busy, scrollToEnd]);
+  useEffect(scrollToEnd, [turns, busy, chips, scrollToEnd]);
 
   useEffect(() => {
     if (!open) return;
@@ -66,6 +85,7 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
       window.removeEventListener("keydown", onKey);
       clearTimeout(focusTimer);
     };
+     
   }, [open]);
 
   function closePanel() {
@@ -73,6 +93,11 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
     abortRef.current = null;
     setOpen(false);
     launcherRef.current?.focus();
+  }
+
+  function resetFlowUI() {
+    setChips([]);
+    setProgress(null);
   }
 
   async function send(text: string) {
@@ -101,6 +126,7 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
+          sessionId,
           messages: history
             .filter((turn) => turn.content.trim())
             .map((turn) => ({ role: turn.role, content: turn.content })),
@@ -141,14 +167,23 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
             const payload = JSON.parse(line.slice(5).trim()) as {
               type: string;
               text?: string;
-              provider?: string;
               message?: string;
+              chips?: string[];
+              progress?: FlowProgress;
+              booked?: { reference: string };
             };
 
             if (payload.type === "delta" && payload.text) {
               updateLast((turn) => ({ ...turn, content: turn.content + payload.text }));
             } else if (payload.type === "error" && payload.message) {
               updateLast((turn) => ({ ...turn, error: true }));
+            } else if (payload.type === "booking") {
+              setChips(Array.isArray(payload.chips) ? payload.chips : []);
+              setProgress(payload.progress ?? null);
+              if (payload.booked?.reference) {
+                setReference(payload.booked.reference);
+                resetFlowUI();
+              }
             } else if (payload.type === "done") {
               setNudgeBook(true);
             }
@@ -185,13 +220,175 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
     }
   }
 
-  // The model may point at a specific service; remember it for the booking form.
+  // The flow may point at a specific service; remember it for the estimate form.
   const lastAssistant = [...turns].reverse().find((turn) => turn.role === "assistant" && turn.content);
   const suggestedService = lastAssistant ? parseSentinels(lastAssistant.content).service : null;
 
   useEffect(() => {
     if (suggestedService) setServiceHint(suggestedService);
   }, [suggestedService]);
+
+  const stageIndex = progress ? STAGES.indexOf(progress.stage as (typeof STAGES)[number]) : -1;
+
+  const panel = (
+    <section
+      id={variant === "page" ? "site-assistant-page" : "site-assistant"}
+      className={`chat-panel is-open${variant === "page" ? " is-page" : ""}`}
+      role="dialog"
+      aria-label={`${business.name} assistant`}
+      data-provider={provider ?? "offline"}
+      data-stage={progress?.stage ?? "chat"}
+    >
+      <header className="chat-head">
+        <span className="chat-head-mark" aria-hidden="true">
+          <Icon name="droplet" size={17} />
+        </span>
+        <div className="chat-head-text">
+          <strong>Aquifer Reach Assistant</strong>
+          <span>{busy ? "Typing…" : progress ? progress.label : "Ask away — or say 'book' and I'll take your request"}</span>
+        </div>
+        {variant === "floating" && (
+          <Link className="chat-head-expand" href="/assistant" aria-label="Open the assistant on its own page">
+            <Icon name="arrow-up-right" size={15} />
+          </Link>
+        )}
+        {variant === "floating" && (
+          <button type="button" className="chat-head-close icon-button" onClick={closePanel} aria-label="Close chat">
+            <Icon name="close" size={18} />
+          </button>
+        )}
+      </header>
+
+      {progress && stageIndex >= 0 && (
+        <div className="chat-meter" role="progressbar" aria-valuemin={1} aria-valuemax={STAGES.length} aria-valuenow={stageIndex + 1} aria-label="Booking progress">
+          {STAGES.map((stage) => (
+            <i key={stage} className={stageIndex >= STAGES.indexOf(stage) ? "is-done" : ""} />
+          ))}
+        </div>
+      )}
+
+      <div className="chat-log" ref={logRef} role="log" aria-live="polite" aria-relevant="additions text">
+        {turns.map((turn, index) => {
+          const isLast = index === turns.length - 1;
+          const { text } = parseSentinels(turn.content);
+          const pending = busy && isLast && turn.role === "assistant" && !text;
+
+          return (
+            <div key={index} className={`chat-row chat-row-${turn.role}${turn.error ? " is-error" : ""}`}>
+              {pending ? (
+                <p className="chat-bubble chat-typing" aria-label="Assistant is typing">
+                  <i />
+                  <i />
+                  <i />
+                </p>
+              ) : (
+                text && <p className="chat-bubble">{text}</p>
+              )}
+            </div>
+          );
+        })}
+
+        {reference && (
+          <div className="chat-booked-card">
+            <span className="chat-booked-eyebrow">REQUEST SENT</span>
+            <strong className="chat-booked-ref">{reference}</strong>
+            <p>Keep that reference handy. Someone from the office will call you to agree the time — a chat request is not a confirmed booking.</p>
+            <a className="chat-booked-call" href={business.phoneHref}>
+              <Icon name="phone" size={15} />
+              {business.phoneDisplay}
+            </a>
+          </div>
+        )}
+      </div>
+
+      {turns.length <= 1 && !chips.length && (
+        <div className="chat-chips">
+          {["What does a well cost?", "Do you cover my area?", "How long does drilling take?", "I'd like to book an estimate"].map((chip) => (
+            <button key={chip} type="button" onClick={() => send(chip)} disabled={busy}>
+              {chip}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!!chips.length && (
+        <div className="chat-chips is-flow" aria-label="Suggested answers">
+          {chips.map((chip) => (
+            <button key={chip} type="button" onClick={() => send(chip)} disabled={busy}>
+              {chip}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="chat-actions">
+        <button
+          type="button"
+          className={`button button-primary chat-book${nudgeBook ? " is-highlighted" : ""}`}
+          onClick={() => {
+            if (reference) {
+              setDraft("");
+              send("start over");
+              return;
+            }
+            // Only a service the estimate form actually offers is pre-selected.
+            const known = bookingServices.some((service) => service.value === serviceHint);
+            onBook(known && serviceHint ? serviceHint : "");
+            setServiceHint(null);
+            setNudgeBook(false);
+            resetFlowUI();
+            if (variant === "floating") setOpen(false);
+          }}
+        >
+          {reference ? "Book another" : "Use the estimate form"}
+          <Icon name="arrow-up-right" size={16} />
+        </button>
+        <a className="chat-call" href={business.phoneHref}>
+          <Icon name="phone" size={15} />
+          {business.phoneDisplay}
+        </a>
+      </div>
+
+      <form
+        className="chat-input"
+        onSubmit={(event) => {
+          event.preventDefault();
+          send(draft);
+        }}
+      >
+        <label className="sr-only" htmlFor={variant === "page" ? "chat-message-page" : "chat-message"}>
+          Your question
+        </label>
+        <input
+          id={variant === "page" ? "chat-message-page" : "chat-message"}
+          ref={inputRef}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder={progress ? "Type your answer, or 'cancel' to stop" : "Ask about your property, or say 'book'…"}
+          maxLength={1500}
+          autoComplete="off"
+        />
+        {busy ? (
+          <button type="button" className="chat-send is-stop" onClick={() => abortRef.current?.abort()} aria-label="Stop the answer">
+            <Icon name="close" size={16} />
+          </button>
+        ) : (
+          <button type="submit" className="chat-send" disabled={!draft.trim()} aria-label="Send your question">
+            <Icon name="arrow-right" size={17} />
+          </button>
+        )}
+      </form>
+
+      <p className="chat-disclosure">
+        Automated assistant. Requests you send here go to the same place as the estimate form. For anything urgent, call{" "}
+        <a href={business.phoneHref}>{business.phoneDisplay}</a>.
+      </p>
+    </section>
+  );
+
+  if (variant === "page") {
+    return <div className="chat-page">{panel}</div>;
+  }
 
   return (
     <>
@@ -202,7 +399,7 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
         aria-expanded={open}
         aria-controls="site-assistant"
         // Below 580px the visible label is display:none, so the button would have
-        // no accessible name at all — the label has to exist for assistive tech too.
+        // no accessible name at all on phones — the label has to exist for assistive tech too.
         aria-label={open ? "Close the assistant" : "Ask about your well"}
         onClick={() => (open ? closePanel() : setOpen(true))}
       >
@@ -211,121 +408,7 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
         </span>
         <span className="chat-launcher-label">{open ? "Close" : "Ask about your well"}</span>
       </button>
-
-      {open && (
-        <section
-          id="site-assistant"
-          className="chat-panel is-open"
-          role="dialog"
-          aria-label={`${business.name} assistant`}
-          data-provider={provider ?? "offline"}
-        >
-        <header className="chat-head">
-          <span className="chat-head-mark" aria-hidden="true">
-            <Icon name="droplet" size={17} />
-          </span>
-          <div className="chat-head-text">
-            <strong>Aquifer Reach Assistant</strong>
-            <span>
-              {busy ? "Typing…" : "Answers in seconds"}
-              {process.env.NODE_ENV !== "production" && provider ? ` · ${provider}` : ""}
-            </span>
-          </div>
-          <button type="button" className="chat-head-close icon-button" onClick={closePanel} aria-label="Close chat">
-            <Icon name="close" size={18} />
-          </button>
-        </header>
-
-        <div className="chat-log" ref={logRef} role="log" aria-live="polite" aria-relevant="additions text">
-          {turns.map((turn, index) => {
-            const isLast = index === turns.length - 1;
-            const { text } = parseSentinels(turn.content);
-            const pending = busy && isLast && turn.role === "assistant" && !text;
-
-            return (
-              <div key={index} className={`chat-row chat-row-${turn.role}${turn.error ? " is-error" : ""}`}>
-                {pending ? (
-                  <p className="chat-bubble chat-typing" aria-label="Assistant is typing">
-                    <i />
-                    <i />
-                    <i />
-                  </p>
-                ) : (
-                  text && <p className="chat-bubble">{text}</p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {turns.length <= 1 && (
-          <div className="chat-chips">
-            {["What does a well cost?", "Do you cover my area?", "How long does drilling take?"].map((chip) => (
-              <button key={chip} type="button" onClick={() => send(chip)} disabled={busy}>
-                {chip}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="chat-actions">
-          <button
-            type="button"
-            className={`button button-primary chat-book${nudgeBook ? " is-highlighted" : ""}`}
-            onClick={() => {
-              // Only a service the booking form actually offers is pre-selected.
-              const known = bookingServices.some((service) => service.value === serviceHint);
-              onBook(known && serviceHint ? serviceHint : "");
-              setServiceHint(null);
-              setNudgeBook(false);
-              setOpen(false);
-            }}
-          >
-            Book a free estimate
-            <Icon name="arrow-up-right" size={16} />
-          </button>
-          <a className="chat-call" href={business.phoneHref}>
-            <Icon name="phone" size={15} />
-            {business.phoneDisplay}
-          </a>
-        </div>
-
-        <form
-          className="chat-input"
-          onSubmit={(event) => {
-            event.preventDefault();
-            send(draft);
-          }}
-        >
-          <label className="sr-only" htmlFor="chat-message">
-            Your question
-          </label>
-          <input
-            id="chat-message"
-            ref={inputRef}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="Ask about your property or a service…"
-            maxLength={1500}
-            autoComplete="off"
-          />
-          {busy ? (
-            <button type="button" className="chat-send is-stop" onClick={() => abortRef.current?.abort()} aria-label="Stop the answer">
-              <Icon name="close" size={16} />
-            </button>
-          ) : (
-            <button type="submit" className="chat-send" disabled={!draft.trim()} aria-label="Send your question">
-              <Icon name="arrow-right" size={17} />
-            </button>
-          )}
-        </form>
-
-          <p className="chat-disclosure">
-            Automated assistant. Nothing in this chat is saved. For anything urgent, call{" "}
-            <a href={business.phoneHref}>{business.phoneDisplay}</a>.
-          </p>
-        </section>
-      )}
+      {open && panel}
     </>
   );
 }

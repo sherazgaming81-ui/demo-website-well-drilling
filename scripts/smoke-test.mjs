@@ -179,6 +179,94 @@ try {
   await page.waitForTimeout(150);
   await page.screenshot({ path: "artifacts/aquifer-mobile.png" });
 
+  // ── The assistant books an estimate on its own, through the UI ──────────
+  await page.evaluate(() => document.documentElement.scrollTo({ top: 0, behavior: "instant" }));
+  await page.setViewportSize({ width: 1456, height: 900 });
+  await page.getByRole("button", { name: "Ask about your well" }).click();
+  const assistant = page.getByRole("dialog", { name: /assistant/i });
+  await assistant.waitFor({ state: "visible", timeout: 8000 });
+
+  const settle = () =>
+    page.waitForFunction(
+      () => {
+        const bubble = [...document.querySelectorAll(".chat-row-assistant .chat-bubble")].pop();
+        return bubble && bubble.textContent.trim().length > 20 && !document.querySelector(".chat-typing");
+      },
+      null,
+      { timeout: 45000 },
+    );
+  const answer = async (text) => {
+    await page.getByRole("textbox", { name: "Your question" }).fill(text);
+    await page.getByRole("button", { name: "Send your question" }).click();
+    await settle();
+  };
+  const clickChip = async (label) => {
+    await page.getByRole("dialog", { name: /assistant/i }).getByRole("button", { name: label, exact: true }).click();
+    await settle();
+  };
+
+  await answer("I want to book an estimate");
+  await clickChip("New screen well");
+  await answer("not a zip");
+  assert.equal(await page.getByText("five-digit US ZIP").count(), 1, "bad ZIP was accepted without a re-ask");
+  await answer("32256");
+  await clickChip("Tomorrow");
+  await clickChip("Morning · 8–12");
+  await answer("Alex Rivera");
+  await answer(`smoke-${Date.now()}@example.com`);
+  await answer("(904) 555-0142");
+  await clickChip("Skip");
+  await clickChip("Yes, go ahead");
+  const readback = await page.locator(".chat-row-assistant .chat-bubble").last().innerText();
+  assert.match(readback, /Here's what I've got/);
+  assert.match(readback, /Step|ZIP|Preferred date/);
+  await clickChip("Yes, send it");
+  const bookedRef = (await page.locator(".chat-booked-ref").innerText().catch(() => "")).trim();
+  assert.match(bookedRef, /^AQ-[A-F0-9]{8}$/, `chat did not return a reference (got "${bookedRef}")`);
+  ok(`Assistant booked an estimate on its own — reference ${bookedRef}`);
+
+  // Desktop must not be cramped or cut off any more.
+  const geometry = await page.evaluate(() => {
+    const panel = document.querySelector(".chat-panel");
+    const log = document.querySelector(".chat-log");
+    const r = panel.getBoundingClientRect();
+    return {
+      width: Math.round(r.width),
+      fitsViewport: r.bottom <= innerHeight + 1 && r.top >= -1,
+      logScrollable: log.scrollHeight >= log.clientHeight,
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      meter: document.querySelectorAll(".chat-meter i").length,
+    };
+  });
+  assert.ok(geometry.width >= 500, `desktop assistant panel is only ${geometry.width}px wide`);
+  assert.equal(geometry.fitsViewport, true, "the assistant panel runs past the viewport on desktop");
+  assert.equal(geometry.overflow, 0, "the assistant adds horizontal overflow on desktop");
+  ok(`Desktop assistant is roomy (${geometry.width}px, panel fully on screen, log scrolls)`);
+
+  // The standalone page.
+  await page.goto(`${baseURL}/assistant`, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(400);
+  assert.equal(await page.getByRole("heading", { name: "Ask the assistant" }).count(), 1);
+  const pageGeom = await page.evaluate(() => {
+    const panel = document.querySelector(".chat-panel.is-page");
+    if (!panel) return null;
+    const r = panel.getBoundingClientRect();
+    return { width: Math.round(r.width), overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+  });
+  assert.ok(pageGeom && pageGeom.width >= 700, `assistant page panel is only ${pageGeom?.width}px wide`);
+  assert.equal(pageGeom?.overflow, 0, "the assistant page overflows horizontally");
+  await page.getByRole("textbox", { name: "Your question" }).fill("Do you cover St Augustine?");
+  await page.getByRole("button", { name: "Send your question" }).click();
+  await settle();
+  const onPage = await page.locator(".chat-row-assistant .chat-bubble").last().innerText();
+  assert.ok(onPage.length > 30, "the assistant page did not answer");
+  await page.screenshot({ path: "artifacts/assistant-page.png" });
+  ok(`Assistant page works on its own (${pageGeom.width}px panel, answered in ${onPage.split(" ").length} words)`);
+
+  await page.setViewportSize({ width: 1456, height: 900 });
+  await page.goto(baseURL, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(400);
+
   // Motion layer: nothing may stay invisible, and the reduced-motion path must
   // show everything immediately. Measured at desktop width after a full instant
   // sweep, so "not yet scrolled to" can never be mistaken for "never revealed".

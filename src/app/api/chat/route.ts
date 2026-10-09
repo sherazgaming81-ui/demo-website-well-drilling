@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { buildMessages, offlineAnswer } from "@/lib/ai/brain";
+import { openingStep, stepFlow, wantsToBook, type FlowSession } from "@/lib/ai/booking-flow";
 import { fetchCompletion, readStream, resolveAttempts, type Attempt } from "@/lib/ai/providers";
 
 export const runtime = "nodejs";
@@ -22,7 +23,11 @@ type IncomingMessage = { role: "user" | "assistant"; content: string };
 const MAX_MESSAGES = 20;
 const MAX_CHARS = 1500;
 const MAX_TOTAL_CHARS = 12_000;
-const ATTEMPT_TIMEOUT_MS = 30_000;
+const ATTEMPT_TIMEOUT_MS = 12_000;
+// One visitor should never be left staring at "typing" while we work out that every
+// provider is rate-limited or out of quota — after this budget the offline knowledge
+// base answers instead. 8 attempts × 12s would otherwise be minutes.
+const CHAIN_BUDGET_MS = 18_000;
 
 /* ----------------------------- rate limiting ----------------------------- */
 
@@ -31,7 +36,68 @@ const RATE_MAX = 30; // messages per window per IP — generous for one visitor
 
 const globalForLimits = globalThis as typeof globalThis & {
   __chatRateLimit?: Map<string, number[]>;
+  __chatBookingFlows?: Map<string, FlowSession>;
 };
+
+/* ----------------------- guided booking sessions ----------------------- */
+
+const FLOW_TTL_MS = 30 * 60 * 1000;
+const FLOW_MAX = 1000;
+const flows = (globalForLimits.__chatBookingFlows ??= new Map<string, FlowSession>());
+
+function flowKey(value: unknown): string | null {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(value) ? value : null;
+}
+
+function getFlow(key: string | null): FlowSession | undefined {
+  if (!key) return undefined;
+  const found = flows.get(key);
+  if (!found) return undefined;
+  if (Date.now() - found.updatedAt > FLOW_TTL_MS) {
+    flows.delete(key);
+    return undefined;
+  }
+  return found;
+}
+
+function saveFlow(key: string | null, session: FlowSession | undefined) {
+  if (!key || !session) return;
+  if (session.stage === "done") {
+    // keep the finished record briefly so a repeat "yes" cannot double-book
+    flows.set(key, session);
+  } else {
+    flows.set(key, session);
+  }
+  if (flows.size > FLOW_MAX) {
+    const cutoff = Date.now() - FLOW_TTL_MS;
+    for (const [id, value] of flows) if (value.updatedAt < cutoff) flows.delete(id);
+  }
+}
+
+/** One flow turn, delivered as the same SSE shape the widget already speaks. */
+function flowStream(step: { session: FlowSession; reply: string; chips: string[]; progress: { stage: string; label: string } | null; booked?: { reference: string } }, key: string | null): Response {
+  saveFlow(key, step.session);
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(event({ type: "start", provider: "booking-flow", model: "guided" }));
+      for (let index = 0; index < step.reply.length; index += 90) {
+        controller.enqueue(event({ type: "delta", text: step.reply.slice(index, index + 90) }));
+      }
+      controller.enqueue(
+        event({
+          type: "booking",
+          stage: step.session.stage,
+          progress: step.progress,
+          chips: step.chips,
+          ...(step.booked ? { booked: step.booked } : {}),
+        }),
+      );
+      controller.enqueue(event({ type: "done", fallback: false }));
+      controller.close();
+    },
+  });
+  return new Response(stream, { headers: streamHeaders("booking-flow", "guided") });
+}
 const hits = (globalForLimits.__chatRateLimit ??= new Map<string, number[]>());
 
 function rateLimited(ip: string): boolean {
@@ -66,6 +132,19 @@ function sameOrigin(request: NextRequest): boolean {
   } catch {
     return false;
   }
+}
+
+/** The newest visitor line, without any of the history rules — used by the flow. */
+function latestUserText(body: unknown): string {
+  const messages = (body as { messages?: unknown })?.messages;
+  if (!Array.isArray(messages)) return "";
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const entry = messages[index] as { role?: unknown; content?: unknown } | null;
+    if (entry && typeof entry === "object" && entry.role === "user" && typeof entry.content === "string") {
+      return entry.content.trim().slice(0, MAX_CHARS);
+    }
+  }
+  return "";
 }
 
 function parseMessages(body: unknown): IncomingMessage[] | null {
@@ -168,6 +247,24 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "We couldn't read that message. Please try again." }, { status: 400 });
   }
 
+  const sessionId = flowKey((parsed as { sessionId?: unknown }).sessionId);
+  const wantsFlow = (parsed as { startBooking?: unknown }).startBooking === true;
+
+  // The guided booking flow is deterministic and runs with no provider at all, so a
+  // visitor can still book while the LLM chain is down or unconfigured. It is stateful
+  // on the server and only needs the newest line, so it is handled before the history
+  // rules below — a booking must not fail because of a chat-shape technicality.
+  const lastUser = latestUserText(parsed);
+  const activeFlow = getFlow(sessionId);
+
+  if (activeFlow && activeFlow.stage !== "done") {
+    return flowStream(await stepFlow(activeFlow, lastUser), sessionId);
+  }
+  const restarting = /^\s*(start over|start again)\s*$/i.test(lastUser);
+  if (wantsFlow || restarting || (!activeFlow && wantsToBook(lastUser))) {
+    return flowStream(openingStep(wantsFlow || restarting ? null : lastUser), sessionId);
+  }
+
   const history = parseMessages(parsed);
   if (!history) {
     return Response.json(
@@ -184,10 +281,15 @@ export async function POST(request: NextRequest) {
   const messages = buildMessages(history);
   const failures: string[] = [];
   const clientSignal = request.signal;
+  const chainStartedAt = Date.now();
 
   for (const attempt of attempts) {
     if (clientSignal.aborted) {
       return new Response(null, { status: 499 });
+    }
+    if (Date.now() - chainStartedAt > CHAIN_BUDGET_MS) {
+      failures.push(`chain budget of ${CHAIN_BUDGET_MS}ms exhausted after ${failures.length} attempt(s)`);
+      break;
     }
 
     const controller = new AbortController();
@@ -213,10 +315,7 @@ export async function POST(request: NextRequest) {
             // The provider died mid-answer. Keep whatever was already streamed
             // and close cleanly — the widget shows the partial reply plus a note.
             streamController.enqueue(
-              event({
-                type: "error",
-                message: error instanceof Error ? error.message.slice(0, 160) : "stream failed",
-              }),
+              event({ type: "error", message: "The answer was interrupted." }),
             );
             streamController.enqueue(event({ type: "done", fallback: false }));
           } finally {
