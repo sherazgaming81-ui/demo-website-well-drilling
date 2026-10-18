@@ -1,95 +1,42 @@
-# Aquifer Reach LLC — water well drilling website
+# Freeze Point AC Care — demonstration site
 
-Single-page marketing site for a licensed Florida well drilling contractor, built with Next.js (App Router), React and TypeScript. One design system, one stylesheet, no UI framework, no database.
+A single-page marketing site for a fictional Karachi air-conditioning company, built to demonstrate design, motion and a working AI intake flow — not a live business. The brand, phone numbers, address, figures and photography are illustrative; the footer and the privacy dialog say so on purpose. Change the one content file below and it becomes a real company's site.
 
-**Live:** https://demo-website-well-drilling.vercel.app — Vercel auto-deploys on push to `main`.
-The canonical URL, Open Graph URL, `robots.txt` and `sitemap.xml` all point at **https://aquiferreachllc.vercel.app**, which is the intended project name: rename the Vercel project (Settings → General → Rename Project) and that domain starts serving immediately, no code change. `NEXT_PUBLIC_SITE_URL` overrides the host for a custom domain later.
-**Business details used:** Aquifer Reach LLC, (904) 477-9809 · 14404 Bartram Creek Blvd, St Johns, FL 32259 (mailing) · 646 E 21st St, Jacksonville, FL 32206 (yard, by appointment) · Mon–Fri 8 am–6 pm, Sat 8 am–12 pm · family-owned since 2017 · six services: rock, screen, artesian, salt & pepper, pump installation, well abandonment.
+**Stack:** Next.js 16 (App Router) · React 19 · TypeScript · hand-written CSS. No UI framework, no database, no analytics, no new dependencies for the assistant.
 
-## Run it
+## Run
 
 ```bash
 npm ci
-npm run dev      # http://localhost:3000
+npm run dev          # http://localhost:3000
 ```
 
-No environment variables are required to run or build.
+Nothing to configure. The assistant answers from the offline knowledge base until a key is set.
 
-## Editing content
+## Changing niche, brand or copy
 
-Everything a non-developer would touch lives in one file: **`src/lib/site-data.ts`**
+Everything a client would edit lives in **`src/lib/site-data.ts`**: name, tagline, phone/WhatsApp, hours, office, `refPrefix` (the reference the office quotes back), services, stats, proof points, brands marquee, process steps, FAQs, gallery, and the estimate form's service list.
 
-- `business` — name, phone, both addresses, hours, founding year
-- `services` — the six service cards, their dialog copy and photos
-- `stats` / `proofPoints` / `promises` — the trust bar and the "Why choose us" list
-- `steps` — the three-step process
-- `faqs` — accordion copy
-- `projects` — the work gallery, with captions (tiles render three across at 3:2)
-- `bookingServices` — the options in the estimate form (ids must stay in sync with `services[].id`)
+That one file also feeds the assistant: the system brief and the offline answers are generated from it at request time, so the chatbot can never disagree with the page. Swapping `site-data.ts` swaps the business — including what the bot talks about.
 
-Typography, colour and layout live in `src/app/globals.css`. Photography lives in `public/images/` — keep the crop ratios used there (hero 928×1152, service cards 1200×800, gallery 900×900 / 1200×900) or pass new sizes to the same `next/image` components.
+Design and motion live in `src/app/globals.css`:
+- tokens at the top (`--paper`, `--ink`, `--blue`, `--navy`, `--frost`, `--amber`, `--line`)
+- fonts are self-hosted variable woff2, subset to the ranges used (`public/fonts/`, SIL OFL; `freeze-urdu.woff2` carries the one Urdu line)
+- the mark is `src/app/icon.svg`, used as the favicon *and* rendered in the header/footer, so they cannot drift
+- **motion policy**: decorative loops (contour rings, hero breathe, frost sweep, marquee, logo turn) run on pointer-fine devices only and are off under `prefers-reduced-motion`; meaningful motion (scroll reveals) stays everywhere
 
-The brand mark — `src/app/icon.svg` — is a hand-authored vector: a gradient droplet with a specular highlight behind a gradient leaf, plus a soft drop shadow. No background plate and no rounded square, so it sits on the cream header and the navy panel alike, and stays legible at 16px.
+## Assistant
 
-It is also **alive**. Five loops live inside the SVG itself, in its own `<style>` block: `aq-breathe` (the droplet swells 1 → 1.028 over 9s), `aq-sweep` (a band of light crosses the droplet every 7s, clipped so it never spills), `aq-sway` (the leaf rotates ±1.6° over 8.5s around its stem), `aq-trace` (a highlight travels the leaf's rim) and `aq-glint` (the specular streak pulses). All of them stop dead under `prefers-reduced-motion: reduce`, which the browser check asserts by counting `document.getAnimations()`.
-
-The same file is the favicon and is rendered in the header/footer through `BrandMark`, so the two can never disagree; `src/app/apple-icon.png` is a raster render of it for the home screen (animated favicons depend on the browser — Chrome and Firefox animate SVG favicons, Safari shows a still). After changing the artwork, re-run `rsvg-convert -w 420 -h 420 src/app/icon.svg -o src/app/apple-icon.png`.
-
-The self-hosted variable font is `public/fonts/dm-sans.ttf` (DM Sans, SIL Open Font License 1.1, `OFL.txt` included); one `@font-face` rule in `globals.css` covers every weight the design uses.
+- `POST /api/chat` streams SSE and never dead-ends: each model is tried in order, and if all of them fail or none is configured, the offline knowledge base answers — **including a completed booking**
+- `GET /api/chat` reports what is wired up, without exposing keys
+- the guided booking is a deterministic ten-step flow (`src/lib/ai/booking-flow.ts`): no model parses a phone number or a date, each answer is checked with the same `validateBooking()` the form uses, and the whole request is read back for confirmation before it is sent
+- `src/lib/ai/sanitize.ts` is the safety net: an invented price or a narration of the model's reasoning never reaches a visitor, and markdown is flattened because the bubble is plain text
+- requests carry `chat_template_kwargs: { thinking: false }`, verified against the gateway to suppress the `reasoning` field entirely
+- provider config: `DAHL_API_KEY`, optional `DAHL_BASE_URL`, `DAHL_MODEL` (comma list, tried in order), `AI_PROVIDER_CHAIN`. See `.env.example`
 
 ## Estimate requests
 
-`POST /api/bookings` validates the form server-side: JSON only, size cap, origin check, hidden honeypot field, per-field validation, idempotency via a client-generated `requestId`, and a five-per-hour limit per email. `GET /api/health` reports how leads are currently handled.
-
-Records are kept in the web server's memory only, so **a submission is not durable on serverless** — it exists to confirm the flow works. To receive real leads, set one environment variable in Vercel and the same request is forwarded, best-effort, without changing any code:
-
-```
-LEAD_WEBHOOK_URL = https://your-endpoint/leads
-```
-
-Any HTTP receiver works: a Zapier/Make catch hook, a CRM webhook, a Slack workflow, or an endpoint that emails the office. The payload is
-
-```json
-{ "reference": "AQ-1A2B3C4D", "receivedAt": "…", "fullName": "…", "email": "…",
-  "phone": "…", "zip": "…", "service": "pump-installation", "serviceLabel": "Pump installation or repair",
-  "preferredDate": "2026-09-30", "timePreference": "morning", "notes": "…", "source": "aquifer-reach-website" }
-```
-
-A failed forward is logged and never blocks the customer's confirmation. If leads must be queryable later, add storage (Vercel Blob, Postgres, Sheet) in `src/app/api/bookings/route.ts` — the module deliberately does not read any environment variable at import time, so a missing variable can never break the build.
-
-## Motion
-
-Motion is deliberately light and skippable — nothing depends on it to be readable.
-
-- `src/lib/use-reveals.ts` drives scroll reveals with one `IntersectionObserver` for the page. Elements opt in with `rv(index)` from `src/lib/site-data`-consuming components, and the observer marks them with a `data-shown` **attribute**, not a class: React rewrites `className` on every re-render, and a class marker gets wiped when a dialog closes, which would leave sections faded out forever.
-- `src/app/layout.tsx` sets `js-reveal` on `<html>` before first paint, so hidden-until-revealed styling only exists when scripts actually run.
-- `src/components/count-up.tsx` counts the trust-bar figures up when they scroll into view.
-- The contour lines in the navy "why us" and blue closing panels drift and breathe (`contour-drift`, `contour-breathe`); the hero photograph breathes (`hero-breathe`); buttons catch a sheen; cards and gallery tiles lift; FAQ answers ease open.
-- The header compacts after 28px of scroll and grows a reading-progress line under it, driven by a single rAF-throttled `--scroll` custom property.
-- Everything is neutralised under `prefers-reduced-motion: reduce` — content is visible immediately and the animations are switched off. The smoke test asserts exactly that.
-
-If you want less motion, delete the `/* ── Motion ── */` block at the end of `src/app/globals.css`; the markup keeps working because `[data-reveal]` alone does nothing without those rules.
-
-### Assistant brain
-
-One provider: the **Dahl Inference** gateway (OpenAI-compatible, free tier — the first
-100M tokens). `GET https://inference.dahl.global/v1/models` is the source of the slug
-list; the code defaults to the three models it returns, in order:
-
-1. `deepseek-ai/DeepSeek-V4-Flash-0731`
-2. `MiniMaxAI/MiniMax-M2.7`
-3. `zai-org/GLM-5.3-Flash`
-
-Set `DAHL_API_KEY` (required) and optionally `DAHL_MODEL` / `DAHL_BASE_URL` /
-`AI_PROVIDER_CHAIN`. With no key the assistant runs on the offline knowledge base,
-which can still take a booking.
-
-Two guards exist because a model on its own breaks them: requests carry
-`chat_template_kwargs: { thinking: false }` so the gateway never sends reasoning, and
-`src/lib/ai/sanitize.ts` replaces any invented price figure with the company's honest
-"we don't quote before seeing the property" line and strips markdown the plain-text
-bubble cannot render. The answer streams first and is replaced at the end only when it
-had to be corrected.
+`POST /api/bookings` and the chat flow share `src/lib/booking-store.ts`: origin check, JSON-only, size cap, honeypot, per-field validation, `requestId` idempotency, five-per-hour per email, and an optional forward to `LEAD_WEBHOOK_URL`. Storage is process memory only, so a deployment restart clears it — connect a webhook, inbox or database before a real business relies on it.
 
 ## Checks
 
@@ -97,40 +44,23 @@ had to be corrected.
 npm run build
 npx tsc --noEmit
 npm run lint
-npx playwright install --with-deps chromium
-npm start                      # in another shell
+npx playwright install chromium
+npm start &                                          # in another shell
 TEST_URL=http://127.0.0.1:3000 node scripts/smoke-test.mjs
+TEST_URL=http://127.0.0.1:3000 node scripts/chat-booking-check.mjs
 TEST_URL=http://127.0.0.1:3000 node scripts/lead-endpoint-check.mjs
+npm run check:deploy                                   # against a deployed URL
 ```
 
-`smoke-test.mjs` (15 checks) walks the real journey in Chromium: every image must decode with no 404, the DM Sans face must be active, the six service cards and their dialogs work, an estimate request completes end to end and returns an `AQ-########` reference, the downloadable summary matches it, the API rejects bad input (422 / 403 / 400 / 415) and repeats idempotently, no element overflows or clips at ten widths from 1600px to 320px, mobile navigation hands off correctly, and the run finishes with zero console errors and zero failed requests, and the motion layer is verified: every `[data-reveal]` element ends up shown, the contour rings report a running animation, the counted stats settle on `8+` and `1,000s`, and `prefers-reduced-motion` is re-tested with emulation. `lead-endpoint-check.mjs` (11 checks) hits the endpoint directly.
+`smoke-test.mjs` (20 checks) walks the journey in Chromium: every image must decode with no 404, the marquee and contour motion must run, an estimate must complete through the chat UI and return an `FP-########` reference, the desktop panel must hold still through a long reply and a chip row, ten widths from 1600px to 320px must show no overflow and no clipped text, phones must get no decorative loops, `prefers-reduced-motion` must show everything with animation off, and the run must end with zero console errors and zero failed requests.
 
-If the CSS looks unchanged after an edit, delete `.next` before rebuilding — Turbopack can hand back a cached stylesheet.
+`deploy-check.mjs` is the one that looks at a *deployed* URL: the CSS the server actually serves must be current, no image may escape its container, the canonical host must answer 200, and the footer note must still be small print. Local testing cannot catch a stale build cache; that is what this is for.
 
-## Before this goes live for the client
+## Before a client ships this as their own
 
-1. **Point the domain.** Metadata and `robots.txt`/`sitemap.xml` assume `https://aquiferreach.com`; override with `NEXT_PUBLIC_SITE_URL` while testing on another host.
-2. **An email address.** The company's current site publishes none — it takes enquiries by phone only. If the client wants an address on the site, they need to supply one; nothing here invents one.
-3. **Social profiles.** Same situation: none are linked anywhere on their current site, so no social icons exist here either.
-4. **Reviews.** The invented testimonials and the "4.9/5" star rating from the template were removed rather than republished. If the client has real Google reviews, they can go back into `site-data.ts` with the customer's written permission.
-5. **Confirm the photo licence.** Every image here was taken from the business's existing website. If a different vendor shot or owns them, confirm the client may reuse them on a new site.
-6. **Have the client read the privacy and terms copy** in `src/app/page.tsx`. It describes what the form collects and states that an estimate is not a contract, but it is not legal advice.
-7. **Set `LEAD_WEBHOOK_URL`** (above), otherwise submitted requests vanish when the serverless function cools down.
-
-## Layout
-
-```
-src/app/page.tsx            sections: hero, trust bar, services, why us, process,
-                            work gallery, FAQs, closing CTA, footer, dialogs
-src/app/layout.tsx          metadata, Open Graph, canonical, robots directive
-src/app/robots.ts           robots.txt
-src/app/sitemap.ts          sitemap.xml
-src/app/globals.css         design system, every breakpoint, no framework
-src/app/api/bookings/       validated estimate endpoint
-src/app/api/health/         status endpoint
-src/components/             booking dialog, modal shell, inline SVG icon set
-src/lib/booking.ts          shared validation, date bounds, formatting
-src/lib/site-data.ts        all business content
-public/                     photography, variable font, license
-scripts/                    browser and endpoint checks
-```
+1. Real name, phone, WhatsApp, hours, address, licence number and NTN — the footer has the slot waiting
+2. Their own photography; the current images are generated placeholders
+3. Real reviews with written permission, or leave the reviews section out (the invented ones were deleted rather than republished)
+4. A lead destination: `LEAD_WEBHOOK_URL`, an inbox or a database — see above
+5. Their own domain in `NEXT_PUBLIC_SITE_URL` (canonical, Open Graph, robots and sitemap follow it automatically)
+6. A lawyer's eyes on the privacy and terms text — it is honest, not legal advice

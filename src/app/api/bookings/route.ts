@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * POST { service, zip, preferredDate, timePreference, fullName, email, phone,
+ * POST { service, area, preferredDate, timePreference, fullName, email, phone,
  *        notes, consent, website, requestId }
  *
  * All rules live in src/lib/booking-store.ts so the chat assistant books through

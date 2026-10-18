@@ -46,9 +46,9 @@ async function turn(content, start = false) {
 const email = `chat-flow-${Date.now()}@example.com`;
 const steps = [
   ["start", "book me", true],
-  ["service", "screen well", false],
-  ["zip-bad", "123", false],
-  ["zip", "28801", false],
+  ["service", "inverter board not working", false],
+  ["area-bad", "123", false],
+  ["area", "Gulshan-e-Iqbal", false],
   ["date", "tomorrow", false],
   ["time", "morning", false],
   ["name", "Alex Rivera", false],
@@ -69,10 +69,10 @@ for (const [label, message, start] of steps) {
   check(`step ${label}`, r.text.length > 20 && !priced, `stage=${r.booking?.stage ?? "-"}${priced ? " ⚠ price!" : ""}`);
 }
 
-check("bad ZIP was re-asked, not accepted", /five-digit/i.test(seen["zip-bad"].text ?? ""));
+check("an unusable area was re-asked, not accepted", /area/i.test(seen["area-bad"].text ?? ""));
 check("consent step read the whole request back", /Here's what I've got/i.test(seen.consent.text ?? ""));
 const reference = seen["confirm"].booking?.booked?.reference;
-check("chat booked and returned a real reference", /^AQ-[A-F0-9]{8}$/.test(reference ?? ""), String(reference));
+check("chat booked and returned a real reference", /^FP-[A-F0-9]{8}$/.test(reference ?? ""), String(reference));
 check("progress meter tracked the flow", (seen["time"].booking?.progress?.label ?? "").includes("of 10"), seen["time"].booking?.progress?.label);
 check("chips were offered for the choice steps", (seen.start.booking?.chips?.length ?? 0) >= 5, `${seen.start.booking?.chips?.length} service chips`);
 
@@ -83,7 +83,7 @@ for (let index = 0; index < 6; index++) {
   const res = await fetch(`${base}/api/bookings`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ service: "screen-wells", zip: "28801", preferredDate: new Date(Date.now() + 2 * 864e5).toISOString().slice(0, 10), timePreference: "morning", fullName: "Alex Rivera", email, phone: "(904) 555-0142", notes: "", consent: true, website: "", requestId: crypto.randomUUID() }),
+    body: JSON.stringify({ service: "ac-inverter", area: "Gulshan-e-Iqbal", preferredDate: new Date(Date.now() + 2 * 864e5).toISOString().slice(0, 10), timePreference: "morning", fullName: "Alex Rivera", email, phone: "(904) 555-0142", notes: "", consent: true, website: "", requestId: crypto.randomUUID() }),
   });
   if (res.status === 429) blocked++;
 }
@@ -104,7 +104,7 @@ check("startBooking works with no history at all", emptyStart.includes('"stage":
 
 // a finished flow must still accept a new booking typed in plain text
 const again = await turn("book me another visit");
-check("re-booking after a completed flow starts a fresh one", again.booking?.stage === "service" || again.booking?.stage === "zip", `stage=${again.booking?.stage ?? "chat"}`);
+check("re-booking after a completed flow starts a fresh one", again.booking?.stage === "service" || again.booking?.stage === "area", `stage=${again.booking?.stage ?? "chat"}`);
 
 console.log(`\n${fails === 0 ? "CHAT BOOKING: all checks passed" : `${fails} CHECK(S) FAILED`}`);
 process.exit(fails === 0 ? 0 : 1);

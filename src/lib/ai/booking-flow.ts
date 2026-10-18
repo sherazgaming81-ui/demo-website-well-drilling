@@ -11,7 +11,7 @@ import { createBooking, newRequestId } from "@/lib/booking-store";
  * a parser that can hallucinate a phone number.
  */
 
-export type FlowStage = "service" | "zip" | "date" | "time" | "name" | "email" | "phone" | "notes" | "consent" | "confirm" | "done";
+export type FlowStage = "service" | "area" | "date" | "time" | "name" | "email" | "phone" | "notes" | "consent" | "confirm" | "done";
 
 export type FlowSession = {
   stage: FlowStage;
@@ -30,11 +30,11 @@ export type FlowStep = {
   booked?: { reference: string };
 };
 
-const ORDER: FlowStage[] = ["service", "zip", "date", "time", "name", "email", "phone", "notes", "consent", "confirm"];
+const ORDER: FlowStage[] = ["service", "area", "date", "time", "name", "email", "phone", "notes", "consent", "confirm"];
 
 const LABEL: Record<FlowStage, string> = {
   service: "the service",
-  zip: "your property ZIP code",
+  area: "your area of the city",
   date: "a preferred date",
   time: "the best time to connect",
   name: "your name",
@@ -46,7 +46,7 @@ const LABEL: Record<FlowStage, string> = {
   done: "done",
 };
 
-const HOUR_OPTIONS = ["Morning · 8–12", "Afternoon · 12–5", "I'm flexible"];
+const HOUR_OPTIONS = ["Morning · 9 am–1 pm", "Evening · 4–9 pm", "Any time works"];
 
 /** Cheap intent check so free chat can offer to start booking. */
 export function wantsToBook(text: string): boolean {
@@ -59,7 +59,7 @@ export function startFlow(seed?: string | null): FlowSession {
     const service = matchService(seed);
     if (service) {
       session.fields.service = service;
-      session.stage = "zip";
+      session.stage = "area";
     }
   }
   return session;
@@ -137,14 +137,16 @@ function parseTime(text: string): string | null {
   const t = text.toLowerCase();
   if (/\b(flexible|any ?time|whatever|doesn.t matter|no preference|both|either)\b/.test(t)) return "flexible";
   if (/\b(morning|a\.?m\.?|early|before noon|9|10|11)\b/.test(t) && !/afternoon|p\.m/.test(t)) return "morning";
-  if (/\b(afternoon|p\.?m\.?|noon|after 12|1|2|3|4)\b/.test(t)) return "afternoon";
+  if (/\b(evening|afternoon|raat|p\.?m\.?)\b/.test(t)) return "afternoon";
   return null;
 }
 
-function parseZip(text: string): string | null {
-  const digits = text.replace(/\D/g, "");
-  if (digits.length === 5) return digits;
-  if (digits.length > 5 && /^\d{5}/.test(digits)) return digits.slice(0, 5);
+/** A five-digit Pakistan postal code, or a neighbourhood name typed in words. */
+function parseArea(text: string): string | null {
+  const clean = text.trim().replace(/\s+/g, " ").replace(/^(my area is|area is|i am from|from)\s+/i, "");
+  const digits = clean.replace(/\D/g, "");
+  if (digits.length >= 5) return digits.slice(0, 5);
+  if (/^[A-Za-z][A-Za-z.'\-\s]{2,59}$/.test(clean)) return clean;
   return null;
 }
 
@@ -183,8 +185,8 @@ function ask(stage: FlowStage, extra = ""): string {
   switch (stage) {
     case "service":
       return `Sure — I can start that for you. What are you after: a new rock well, a screen well, an artesian well, a salt & pepper well, pump work, or closing an old well? If you're not sure, say so and we'll figure it out together.${extra}`;
-    case "zip":
-      return "What's the ZIP code of the property? That's how we confirm the crew actually covers your area.";
+    case "area":
+      return `Which area of ${business.city}? A neighbourhood name or a five-digit postal code both work — that's how we confirm a technician can reach you same-day.`;
     case "date": {
       const { min, max } = dateBounds();
       return `Got it. What date suits you? We can look at anything from tomorrow through ${formatDate(max)} — "tomorrow", "next Friday" or "Sep 20" all work.`;
@@ -213,9 +215,9 @@ export function summary(session: FlowSession): string {
   const service = bookingServices.find((option) => option.value === f.service)?.label ?? f.service ?? "—";
   const lines = [
     `Service: ${service}`,
-    `Property ZIP: ${f.zip ?? "—"}`,
+    `Area: ${f.area ?? "—"}`,
     `Preferred date: ${f.preferredDate ? formatDate(f.preferredDate) : "—"}`,
-    `Time: ${f.timePreference === "morning" ? "Morning · 8–12" : f.timePreference === "afternoon" ? "Afternoon · 12–5" : "Flexible"}`,
+    `Time: ${f.timePreference === "morning" ? "Morning · 9 am–1 pm" : f.timePreference === "afternoon" ? "Evening · 4–9 pm" : "Any time"}`,
     `Name: ${f.fullName ?? "—"}`,
     `Email: ${f.email ?? "—"}`,
     `Phone: ${f.phone ?? "—"}`,
@@ -269,9 +271,9 @@ export async function stepFlow(previous: FlowSession, text: string): Promise<Flo
   }
 
   if (session.stage === "confirm") {
-    const change = raw.match(/^change\s+(service|zip|date|time|name|email|phone|notes)$/i)?.[1];
+    const change = raw.match(/^change\s+(service|area|date|time|name|email|phone|notes)$/i)?.[1];
     if (change) {
-      const map: Record<string, FlowStage> = { service: "service", zip: "zip", date: "date", time: "time", name: "name", email: "email", phone: "phone", notes: "notes" };
+      const map: Record<string, FlowStage> = { service: "service", area: "area", date: "date", time: "time", name: "name", email: "email", phone: "phone", notes: "notes" };
       session.stage = map[change];
       return { session, reply: ask(session.stage), chips: chipsFor(session.stage, session), progress: progressOf(session) };
     }
@@ -287,7 +289,7 @@ export async function stepFlow(previous: FlowSession, text: string): Promise<Flo
     if (!result.ok) {
       // Push the visitor straight back to the field the server objected to.
       const firstKey = result.errors ? (Object.keys(result.errors)[0] as keyof BookingFields) : undefined;
-      const stageForField: Partial<Record<keyof BookingFields, FlowStage>> = { service: "service", zip: "zip", preferredDate: "date", timePreference: "time", fullName: "name", email: "email", phone: "phone", notes: "notes", consent: "consent" };
+      const stageForField: Partial<Record<keyof BookingFields, FlowStage>> = { service: "service", area: "area", preferredDate: "date", timePreference: "time", fullName: "name", email: "email", phone: "phone", notes: "notes", consent: "consent" };
       const next = firstKey && stageForField[firstKey] ? stageForField[firstKey]! : "confirm";
       session.stage = next;
       const detail = firstKey && result.errors?.[firstKey] ? ` ${result.errors[firstKey]}` : ` ${result.error}`;
@@ -311,13 +313,13 @@ export async function stepFlow(previous: FlowSession, text: string): Promise<Flo
       const value = matchService(raw);
       if (!value) return reask(session, `I can book ${bookingServices.map((o) => o.label.toLowerCase()).join(", ")}, or we can start with a conversation if you're not sure yet.`);
       session.fields.service = value;
-      session.stage = "zip";
+      session.stage = "area";
       return next(session, value === "not-sure" ? "No problem — that's common, and the on-site visit is exactly what clears it up." : "");
     }
-    case "zip": {
-      const zip = parseZip(raw);
-      if (!zip) return reask(session, "I need a five-digit US ZIP for that — it's how we confirm coverage.");
-      session.fields.zip = zip;
+    case "area": {
+      const area = parseArea(raw);
+      if (!area) return reask(session, `I need your area — something like "DHA Phase 5", "Gulshan-e-Iqbal" or a five-digit postal code like ${business.postalCode}.`);
+      session.fields.area = area;
       session.stage = "date";
       return next(session);
     }

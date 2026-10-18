@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { validateBooking, type BookingErrors, type BookingFields } from "@/lib/booking";
-import { bookingServices } from "@/lib/site-data";
+import { bookingServices, business } from "@/lib/site-data";
 
 /**
  * One booking store, two front doors: POST /api/bookings (the estimate dialog) and
@@ -30,7 +30,7 @@ export type BookingOutcome =
   | { ok: true; reference: string; created: boolean; status: 200 | 201 }
   | { ok: false; status: 400 | 422 | 429; error: string; errors?: BookingErrors; retryAfterSeconds?: number };
 
-const referenceFor = (id: string) => `AQ-${id.slice(0, 8).toUpperCase()}`;
+const referenceFor = (id: string) => `${business.refPrefix}-${id.slice(0, 8).toUpperCase()}`;
 
 function prune() {
   const cutoff = Date.now() - WINDOW_MS;
@@ -105,7 +105,7 @@ export async function createBooking(input: Partial<BookingFields>, requestIdHint
     fullName: fields.fullName.trim(),
     email,
     phone: fields.phone.trim(),
-    zip: fields.zip.trim(),
+    area: fields.area.trim(),
     service: fields.service,
     serviceLabel: bookingServices.find((item) => item.value === fields.service)?.label ?? fields.service,
     preferredDate: fields.preferredDate,

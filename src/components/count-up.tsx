@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 
 type Props = {
   to: number;
+  /** Count up from 0 by default; pass a number above `to` to count down. */
+  from?: number;
   /** Anything appended after the number, e.g. "+" or "s". */
   suffix?: string;
   durationMs?: number;
@@ -14,9 +16,9 @@ type Props = {
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 
 /** Counts from 0 to `to` the first time it scrolls into view. */
-export function CountUp({ to, suffix = "", durationMs = 1400, className, ...rest }: Props) {
+export function CountUp({ to, from = 0, suffix = "", durationMs = 1400, className, ...rest }: Props) {
   const ref = useRef<HTMLSpanElement | null>(null);
-  const [value, setValue] = useState(0);
+  const [value, setValue] = useState(from);
 
   useEffect(() => {
     const node = ref.current;
@@ -33,7 +35,7 @@ export function CountUp({ to, suffix = "", durationMs = 1400, className, ...rest
     const run = (now: number) => {
       if (!start) start = now;
       const progress = Math.min(1, (now - start) / durationMs);
-      setValue(Math.round(to * easeOut(progress)));
+      setValue(Math.round(from + (to - from) * easeOut(progress)));
       if (progress < 1) frame = requestAnimationFrame(run);
     };
 
@@ -50,7 +52,7 @@ export function CountUp({ to, suffix = "", durationMs = 1400, className, ...rest
       observer.disconnect();
       cancelAnimationFrame(frame);
     };
-  }, [to, durationMs]);
+  }, [to, from, durationMs]);
 
   return (
     <span ref={ref} className={className} {...rest}>

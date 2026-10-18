@@ -3,12 +3,12 @@ const base = process.env.TEST_URL || "http://127.0.0.1:3111";
 const d = new Date();
 d.setUTCDate(d.getUTCDate() + 1);
 const valid = {
-  service: "rock-wells",
-  zip: "32256",
+  service: "ac-repair",
+  area: "Gulshan-e-Iqbal",
   preferredDate: d.toISOString().slice(0, 10),
   timePreference: "morning",
   fullName: "Alex Demo",
-  email: `aquifer-lead-${Date.now()}@example.com`,
+  email: `freeze-lead-${Date.now()}@example.com`,
   phone: "(919) 555-0142",
   notes: "Automated demonstration request. No real customer or appointment.",
   consent: true,
@@ -36,7 +36,7 @@ check("GET /api/health returns 200", health.status === 200 && healthBody.ok === 
 const first = await post(valid);
 const firstBody = await first.json();
 check("valid booking -> 201 + ok", first.status === 201 && firstBody.ok === true, `status=${first.status}`);
-check("reference matches /^AQ-[A-F0-9]{8}$/ (dialog + smoke-test expect this)", /^AQ-[A-F0-9]{8}$/.test(firstBody.reference || ""), firstBody.reference);
+check("reference matches /^FP-[A-F0-9]{8}$/ (dialog + smoke-test expect this)", /^FP-[A-F0-9]{8}$/.test(firstBody.reference || ""), firstBody.reference);
 
 const dupe = await post(valid);
 const dupeBody = await dupe.json();

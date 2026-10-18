@@ -1,6 +1,7 @@
+import { business } from "@/lib/site-data";
 import type { ReactNode } from "react";
 
-export type IconName = "arrow-right" | "arrow-up-right" | "arrow-down" | "phone" | "check" | "shield" | "clock" | "droplet" | "menu" | "close" | "chevron-down" | "chevron-left" | "chevron-right" | "plus" | "minus" | "map-pin" | "calendar" | "sprout" | "home" | "wrench" | "message" | "ruler" | "file-check" | "lock" | "mail" | "star" | "download";
+export type IconName = "arrow-right" | "arrow-up-right" | "arrow-down" | "phone" | "check" | "shield" | "clock" | "droplet" | "menu" | "close" | "chevron-down" | "chevron-left" | "chevron-right" | "plus" | "minus" | "map-pin" | "calendar" | "sprout" | "home" | "wrench" | "message" | "ruler" | "file-check" | "lock" | "mail" | "star" | "download" | "snowflake" | "whatsapp";
 
 const paths: Record<IconName, ReactNode> = {
   "arrow-right": <><path d="M4 12h15M13 5l7 7-7 7" /></>,
@@ -23,6 +24,8 @@ const paths: Record<IconName, ReactNode> = {
   sprout: <><path d="M12 21V11M12 15C4 15 3 10 3 5c5 0 9 2 9 7M12 11c0-6 4-8 9-8 0 6-3 9-9 9" /></>,
   home: <><path d="m3 10 9-7 9 7M5 9v12h14V9" /><path d="M9 21v-8h6v8" /></>,
   wrench: <path d="M21 6a6 6 0 0 1-8 7L6 20a2.1 2.1 0 0 1-3-3l7-7a6 6 0 0 1 7-8l-4 4 4 4 4-4Z" />,
+  snowflake: <><path d="M12 2v20M4 6.5l16 11M20 6.5 4 17.5" /><path d="M12 2 9.6 4.6M12 2l2.4 2.6M12 22l-2.4-2.6M12 22l2.4-2.6" /></>,
+  whatsapp: <path d="M12 3a9 9 0 0 0-7.7 13.6L3 21l4.5-1.2A9 9 0 1 0 12 3Zm-2.6 4.9c.2-.4.5-.4.7-.4h.6c.2 0 .4 0 .6.5l.7 1.7c0 .2 0 .4-.2.6l-.5.5c-.1.2-.2.3 0 .6a7 7 0 0 0 2.7 2.4c.3.1.4 0 .6-.1l.5-.6c.2-.2.3-.2.6-.1l1.6.8c.3.1.4.3.4.5 0 .8-.6 1.5-1.4 1.6-1.4.2-3.4-.7-5.2-2.3-1.6-1.5-2.6-3.3-2.7-4.5 0-.6.2-1.2.7-1.6Z" stroke="none" fill="currentColor" />,
   message: <><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H8l-5 2V7.5A5.5 5.5 0 0 1 8.5 2h4a8.5 8.5 0 0 1 8.5 9.5Z" /><path d="M7 8h9M7 12h6" /></>,
   ruler: <><path d="m3 16 13-13 5 5L8 21l-5-5Z" /><path d="m12 7 2 2m-6 2 2 2m-6 2 2 2" /></>,
   "file-check": <><path d="M14 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9l-7-7Z" /><path d="M14 2v7h7m-14 6 3 3 6-6" /></>,
@@ -45,7 +48,7 @@ export function BrandMark({ className = "" }: { className?: string }) {
 }
 
 export function Brand({ light = false }: { light?: boolean }) {
-  return <a href="#top" className={`brand ${light ? "brand-light" : ""}`} aria-label="Aquifer Reach LLC home"><BrandMark /><span className="brand-type"><span className="brand-word">aquifer reach</span><span className="brand-sub">WELL DRILLING CO.</span></span></a>;
+  return <a href="#top" className={`brand ${light ? "brand-light" : ""}`} aria-label={`${business.shortName} home`}><BrandMark /><span className="brand-type"><span className="brand-word">freeze point</span><span className="brand-sub">AC CARE · KARACHI</span></span></a>;
 }
 
 export function Stars({ size = 13 }: { size?: number }) {

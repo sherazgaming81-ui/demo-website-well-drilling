@@ -2,7 +2,8 @@ import { bookingServices } from "@/lib/site-data";
 
 export type BookingFields = {
   service: string;
-  zip: string;
+  /** Locality in Karachi, or a five-digit Pakistan postal code. */
+  area: string;
   preferredDate: string;
   timePreference: string;
   fullName: string;
@@ -25,7 +26,7 @@ export function dateBounds() {
 }
 
 export function formatDate(value: string) {
-  return new Date(`${value}T12:00:00Z`).toLocaleDateString("en-US", {
+  return new Date(`${value}T12:00:00Z`).toLocaleDateString("en-GB", {
     weekday: "short", month: "long", day: "numeric", timeZone: "UTC",
   });
 }
@@ -35,7 +36,9 @@ export function validateBooking(fields: Partial<BookingFields>, scope: "project"
   const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
   if (scope !== "contact") {
     if (!bookingServices.some((service) => service.value === fields.service)) errors.service = "Please choose a service.";
-    if (!/^\d{5}$/.test(text(fields.zip))) errors.zip = "Enter a valid five-digit US ZIP code.";
+    const area = text(fields.area);
+    const knownArea = /^\d{5}$/.test(area) || /^[A-Za-z][A-Za-z.'\-\s]{2,59}$/.test(area);
+    if (!knownArea) errors.area = "Tell us your area — “Gulshan-e-Iqbal” or a five-digit postal code both work.";
     const preferredDate = text(fields.preferredDate);
     const { min, max } = dateBounds();
     const parsed = new Date(`${preferredDate}T12:00:00Z`);
@@ -51,7 +54,7 @@ export function validateBooking(fields: Partial<BookingFields>, scope: "project"
     if (name.length < 2 || name.length > 100) errors.fullName = "Enter your full name (2–100 characters).";
     if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = "Enter a valid email address.";
     const digits = phone.replace(/\D/g, "");
-    if (!/^[+\d().\s-]+$/.test(phone) || digits.length < 10 || digits.length > 15 || phone.length > 32) errors.phone = "Enter a valid phone number with area code.";
+    if (!/^[+\d().\s-]+$/.test(phone) || digits.length < 10 || digits.length > 15 || phone.length > 32) errors.phone = "Enter a reachable number, like 0300 555 0142.";
     if (typeof fields.notes !== "string" || fields.notes.length > 1500) errors.notes = "Please keep your message under 1,500 characters.";
     if (fields.consent !== true) errors.consent = "Please agree so we can respond to your request.";
   }

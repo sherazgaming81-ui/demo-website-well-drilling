@@ -19,7 +19,7 @@ type ChatTurn = { role: "user" | "assistant"; content: string; error?: boolean }
 
 type FlowProgress = { stage: string; label: string } | null;
 
-const GREETING = `Hi — I'm the assistant here. Ask me anything about wells, pumps or water for your property. I can also take your estimate request right here in the chat, or you can use the estimate form. How can I help?`;
+const GREETING = `Hi — I'm the assistant here. Ask me anything about your AC: not cooling, gas, noise, a smell, servicing, or a new unit to install. I can also take your inspection request right here in the chat. What's the unit doing?`;
 
 const SENTINEL = /\[\[(BOOK|SERVICE:([a-z0-9-]+))\]\]/gi;
 const STAGES = ["service", "zip", "date", "time", "name", "email", "phone", "notes", "consent", "confirm"] as const;
@@ -224,7 +224,7 @@ export function ChatWidget({ onBook, variant = "floating" }: { onBook: (serviceI
     }
   }
 
-  // The flow may point at a specific service; remember it for the estimate form.
+  // The flow may point at a specific service; remember it for the booking form.
   const lastAssistant = [...turns].reverse().find((turn) => turn.role === "assistant" && turn.content);
   const suggestedService = lastAssistant ? parseSentinels(lastAssistant.content).service : null;
 
@@ -307,7 +307,7 @@ export function ChatWidget({ onBook, variant = "floating" }: { onBook: (serviceI
 
       {turns.length <= 1 && !chips.length && (
         <div className="chat-chips">
-          {["What does a well cost?", "Do you cover my area?", "How long does drilling take?", "I'd like to book an estimate"].map((chip) => (
+          {["My AC runs but is not cooling", "Gas leak ho gaya?", "Service kab karwai jaye?", "Book a free inspection"].map((chip) => (
             <button key={chip} type="button" onClick={() => send(chip)} disabled={busy}>
               {chip}
             </button>
@@ -335,7 +335,7 @@ export function ChatWidget({ onBook, variant = "floating" }: { onBook: (serviceI
               send("start over");
               return;
             }
-            // Only a service the estimate form actually offers is pre-selected.
+            // Only a service the booking form actually offers is pre-selected.
             const known = bookingServices.some((service) => service.value === serviceHint);
             onBook(known && serviceHint ? serviceHint : "");
             setServiceHint(null);
@@ -344,7 +344,7 @@ export function ChatWidget({ onBook, variant = "floating" }: { onBook: (serviceI
             if (variant === "floating") setOpen(false);
           }}
         >
-          {reference ? "Book another" : "Use the estimate form"}
+          {reference ? "Book another" : "Use the inspection form"}
           <Icon name="arrow-up-right" size={16} />
         </button>
         <a className="chat-call" href={business.phoneHref}>
@@ -384,7 +384,7 @@ export function ChatWidget({ onBook, variant = "floating" }: { onBook: (serviceI
       </form>
 
       <p className="chat-disclosure">
-        Automated assistant. Requests you send here go to the same place as the estimate form. For anything urgent, call{" "}
+        Automated assistant. Requests you send here go to the same place as the inspection form. For anything urgent, call{" "}
         <a href={business.phoneHref}>{business.phoneDisplay}</a>.
       </p>
     </section>
@@ -404,13 +404,13 @@ export function ChatWidget({ onBook, variant = "floating" }: { onBook: (serviceI
         aria-controls="site-assistant"
         // Below 580px the visible label is display:none, so the button would have
         // no accessible name at all on phones — the label has to exist for assistive tech too.
-        aria-label={open ? "Close the assistant" : "Ask about your well"}
+        aria-label={open ? "Close the assistant" : "Ask about your AC"}
         onClick={() => (open ? closePanel() : setOpen(true))}
       >
         <span className="chat-launcher-icon">
           <Icon name={open ? "close" : "message"} size={19} />
         </span>
-        <span className="chat-launcher-label">{open ? "Close" : "Ask about your well"}</span>
+        <span className="chat-launcher-label">{open ? "Close" : "Ask about your AC"}</span>
       </button>
       {open && panel}
     </>

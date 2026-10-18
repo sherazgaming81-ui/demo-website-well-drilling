@@ -18,7 +18,7 @@ page.on("response", (response) => { if (response.status() >= 400) failedRequests
 try {
   await page.goto("/", { waitUntil: "networkidle" });
   await page.evaluate(() => document.fonts.ready);
-  assert.match(await page.title(), /^Aquifer Reach LLC/);
+  assert.match(await page.title(), /^Freeze Point AC Care/);
   assert.equal(await page.getByRole("heading", { level: 1 }).count(), 1);
   ok(`Homepage renders with the real business title`);
 
@@ -55,69 +55,84 @@ try {
   assert.equal(fontLoaded, true, "self-hosted DM Sans did not load");
   ok(`${media.length} images decoded, no 404s, DM Sans active`);
 
+  const marquee = await page.evaluate(() => {
+    const track = document.querySelector(".marquee-track");
+    const items = [...document.querySelectorAll(".marquee-item")].map((el) => el.textContent.trim());
+    return { count: items.length, first: items[0] ?? null, anim: track ? getComputedStyle(track).animationName : "none" };
+  });
+  assert.ok(marquee.count >= 16, `marquee should hold the brand list twice for a seamless loop, saw ${marquee.count}`);
+  assert.equal(marquee.anim, "marquee-run");
+
   const brokenAnchors = await page.evaluate(() => [...document.querySelectorAll('a[href^="#"]')].map((link) => link.getAttribute("href")).filter((href) => href.length > 1 && !document.getElementById(href.slice(1))));
   assert.deepEqual(brokenAnchors, []);
   ok("All internal navigation targets exist");
 
   // Services, dialog, and the estimate request handed over from it.
   assert.equal(await page.locator(".service-card").count(), 6);
-  await page.getByRole("button", { name: "Learn more about rock wells", exact: true }).click();
+  await page.getByRole("button", { name: "Learn more about ac repair", exact: true }).click();
   await page.getByRole("dialog").waitFor({ state: "visible" });
-  assert.equal(await page.getByRole("heading", { name: "Rock wells", exact: true }).count(), 2); // the card and the dialog
-  await page.getByRole("button", { name: "Request an estimate for this" }).click();
-  assert.equal(await page.getByLabel("What can we help you with?").inputValue(), "rock-wells");
+  assert.equal(await page.getByRole("heading", { name: "AC repair", exact: true }).count(), 2); // the card and the dialog
+  await page.getByRole("button", { name: "Request an inspection for this" }).click();
+  assert.equal(await page.getByLabel("What can we help you with?").inputValue(), "ac-repair");
   await page.keyboard.press("Escape");
   await page.getByRole("dialog").waitFor({ state: "detached" });
-  ok("Six services, service dialog, and prefilled estimate request");
+  ok("Six services, service dialog, and a prefilled inspection request");
 
   // Work gallery carries real captions, FAQ opens and closes.
   assert.equal(await page.locator(".work-tile").count(), 6);
-  assert.match(await page.locator(".work-tile figcaption").first().innerText(), /Jacksonville|site|rig|casing|pressure|light/i);
-  await page.getByRole("button", { name: "What does a new well cost?", exact: true }).click();
-  assert.equal(await page.locator("#faq-answer-3").isVisible(), true);
-  await page.getByRole("button", { name: "What does a new well cost?", exact: true }).click();
-  assert.equal(await page.locator("#faq-answer-3").isVisible(), false);
+  assert.match(await page.locator(".work-tile figcaption").first().innerText(), /Clifton|Gulshan|Karachi|Nazimabad|Phase|Faisal/);
+  await page.getByRole("button", { name: "Can you just refill the gas?", exact: true }).click();
+  assert.equal(await page.locator("#faq-answer-2").isVisible(), true);
+  assert.match(await page.locator("#faq-answer-2").innerText(), /not consumed|leaking/i);
+  await page.getByRole("button", { name: "Can you just refill the gas?", exact: true }).click();
+  assert.equal(await page.locator("#faq-answer-2").isVisible(), false);
   ok("Project gallery and FAQ accordion");
 
   // Real contact details must be present, and placeholder demo text gone.
   const body = await page.locator("body").innerText();
-  assert.match(body, /\(904\) 477-9809/);
-  assert.match(body, /646 E 21st St, Jacksonville, FL 32206/);
-  assert.match(body, /14404 Bartram Creek Blvd/);
-  assert.ok(!/demo|illustrative sample|fictional|lorem/i.test(body.replace(/demonstrat\w*|democracy/gi, "")), "leftover demo/fictional wording on the page");
-  ok("Real phone, both addresses, and no demo/fictional copy left");
+  assert.match(body, /0300 555 0142/);
+  assert.match(body, /Shahrah-e-Faisal/);
+  assert.match(body, /9 am – 9 pm|9 am–9 pm/);
+  // This is a portfolio piece: it must say so honestly, and must not leak the
+  // previous niche it was built from. "water" is deliberately not on the list —
+  // condensate and dripping water are genuine AC complaints.
+  assert.match(body, /Demonstration website/i);
+  for (const stale of ["Aquifer", "Jacksonville", "\\bwell\\b", "drilling", "ZIP code", "Northeast Florida"]) {
+    assert.ok(!new RegExp(stale, "i").test(body), `leftover copy from the old niche: ${stale}`);
+  }
+  ok("Real Karachi details, honest demo disclosure, and no leftovers from the old niche");
 
   // The booking form: validation first, then a successful request.
-  await page.getByRole("button", { name: "Request your free estimate", exact: true }).first().click();
+  await page.getByRole("button", { name: "Request a free inspection", exact: true }).first().click();
   await page.getByRole("button", { name: "Next: your details" }).click();
   assert.equal(await page.getByText("Please choose a service.").count(), 1);
-  await page.getByLabel("What can we help you with?").selectOption("pump-installation");
-  await page.getByLabel("Property ZIP code", { exact: true }).fill("32256");
+  await page.getByLabel("What can we help you with?").selectOption("ac-gas");
+  await page.getByLabel("Area of Karachi, or postal code", { exact: true }).fill("Gulshan-e-Iqbal");
   const preferredDate = await page.getByLabel("Your preferred date").getAttribute("min");
   await page.getByLabel("Your preferred date").fill(preferredDate);
   await page.getByLabel("Best time to connect").selectOption("morning");
   await page.getByRole("button", { name: "Next: your details" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Request my free estimate" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Request my free inspection" }).click();
   assert.equal(await page.getByText("Enter a valid email address.").count(), 1);
   await page.getByLabel("Full name", { exact: true }).fill("Alex Rivera");
-  await page.getByLabel("Email address", { exact: true }).fill(`aquifer-smoke-${Date.now()}@example.com`);
-  await page.getByLabel("Phone number", { exact: true }).fill("(904) 555-0142");
-  await page.getByLabel(/Anything else we should know/).fill("Smoke test request. Please do not call this number.");
+  await page.getByLabel("Email address", { exact: true }).fill(`freeze-smoke-${Date.now()}@example.com`);
+  await page.getByLabel("Phone number", { exact: true }).fill("0311 555 0142");
+  await page.getByLabel(/Anything else we should know/).fill("Smoke test request — please do not call this number.");
   await page.getByRole("checkbox").check();
   const requestPromise = page.waitForRequest((request) => request.url().includes("/api/bookings") && request.method() === "POST");
-  await page.getByRole("dialog").getByRole("button", { name: "Request my free estimate" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Request my free inspection" }).click();
   const sentRequest = await requestPromise;
   await page.getByRole("heading", { name: "You’re on your way." }).waitFor({ timeout: 15000 });
   const reference = await page.locator(".reference").innerText();
-  assert.match(reference, /^AQ-[A-F0-9]{8}$/);
+  assert.match(reference, /^FP-[A-F0-9]{8}$/);
   await page.screenshot({ path: "artifacts/aquifer-confirmation.png" });
-  ok(`Estimate request accepted with reference ${reference}`);
+  ok(`Inspection request accepted with reference ${reference}`);
 
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download your request summary" }).click();
   const download = await downloadPromise;
   assert.equal(download.suggestedFilename(), `Aquifer-${reference}.txt`);
-  ok("Downloadable estimate summary for the customer's records");
+  ok("Downloadable inspection summary for the customer's records");
 
   const payload = sentRequest.postDataJSON();
   const duplicate = await page.request.post("/api/bookings", { data: payload });
@@ -140,7 +155,7 @@ try {
   await page.getByRole("button", { name: "Privacy policy", exact: true }).click();
   assert.equal(await page.getByRole("heading", { name: "Your privacy matters." }).count(), 1);
   const privacy = await page.getByRole("dialog").innerText();
-  assert.match(privacy, /\(904\) 477-9809/);
+  assert.match(privacy, /0300 555 0142/);
   assert.ok(!/fictional|demonstration brand/i.test(privacy));
   await page.getByRole("button", { name: "Got it" }).click();
   ok("Privacy dialog with the real phone and no demo language");
@@ -164,7 +179,7 @@ try {
   assert.equal(await page.locator("#mobile-navigation").isVisible(), true);
   await page.locator("#mobile-navigation").getByRole("link", { name: "Our work" }).click();
   assert.equal(await page.locator("#mobile-navigation").count(), 0);
-  await page.getByRole("button", { name: "Estimate", exact: true }).click();
+  await page.getByRole("button", { name: "Inspect", exact: true }).click();
   await page.getByRole("dialog").waitFor({ state: "visible" });
   await page.screenshot({ path: "artifacts/aquifer-mobile-booking.png" });
   await page.keyboard.press("Escape");
@@ -179,10 +194,10 @@ try {
   await page.waitForTimeout(150);
   await page.screenshot({ path: "artifacts/aquifer-mobile.png" });
 
-  // ── The assistant books an estimate on its own, through the UI ──────────
+  // ── The assistant books an inspection on its own, through the UI ────────
   await page.evaluate(() => document.documentElement.scrollTo({ top: 0, behavior: "instant" }));
   await page.setViewportSize({ width: 1456, height: 900 });
-  await page.getByRole("button", { name: "Ask about your well" }).click();
+  await page.getByRole("button", { name: "Ask about your AC" }).click();
   const assistant = page.getByRole("dialog", { name: /assistant/i });
   await assistant.waitFor({ state: "visible", timeout: 8000 });
 
@@ -205,25 +220,25 @@ try {
     await settle();
   };
 
-  await answer("I want to book an estimate");
-  await clickChip("New screen well");
-  await answer("not a zip");
-  assert.equal(await page.getByText("five-digit US ZIP").count(), 1, "bad ZIP was accepted without a re-ask");
-  await answer("32256");
+  await answer("I want to book an inspection");
+  await clickChip("Inverter board fault");
+  await answer("12");
+  assert.match(await page.getByRole("dialog", { name: /assistant/i }).innerText(), /your area/i, "an unusable area was accepted without a re-ask");
+  await answer("Gulshan-e-Iqbal");
   await clickChip("Tomorrow");
-  await clickChip("Morning · 8–12");
-  await answer("Alex Rivera");
+  await clickChip("Morning · 9 am–1 pm");
+  await answer("Ayesha Khan");
   await answer(`smoke-${Date.now()}@example.com`);
-  await answer("(904) 555-0142");
+  await answer("0300 555 0142");
   await clickChip("Skip");
   await clickChip("Yes, go ahead");
   const readback = await page.locator(".chat-row-assistant .chat-bubble").last().innerText();
   assert.match(readback, /Here's what I've got/);
-  assert.match(readback, /Step|ZIP|Preferred date/);
+  assert.match(readback, /Service:|Area:|Preferred date:/);
   await clickChip("Yes, send it");
   const bookedRef = (await page.locator(".chat-booked-ref").innerText().catch(() => "")).trim();
-  assert.match(bookedRef, /^AQ-[A-F0-9]{8}$/, `chat did not return a reference (got "${bookedRef}")`);
-  ok(`Assistant booked an estimate on its own — reference ${bookedRef}`);
+  assert.match(bookedRef, /^FP-[A-F0-9]{8}$/, `chat did not return a reference (got "${bookedRef}")`);
+  ok(`Assistant booked an inspection on its own — reference ${bookedRef}`);
 
   // Stability: the box must not jump when a long reply arrives or the chip row
   // appears and disappears — that shift is what read as "unstable" on a PC.
@@ -248,14 +263,14 @@ try {
   const withChips = await box();
   const meterSeen = await page.locator(".chat-meter i").count();
 
-  await page.getByRole("button", { name: "New screen well" }).click();
-  await page.waitForFunction(() => !document.querySelector(".chat-typing"), null, { timeout: 40000 });
+  await clickChip("AC repair — not cooling or making noise");
+  await settle();
   await page.getByRole("textbox", { name: "Your question" }).fill("cancel");
   await page.getByRole("button", { name: "Send your question" }).click();
   // the meter disappears when the flow ends; the "Start over" chip stays by design
-  await page.waitForFunction(() => !document.querySelector(".chat-meter"), null, { timeout: 40000 });
-  const cancelledText = await page.locator(".chat-row-assistant .chat-bubble").last().innerText();
-  assert.match(cancelledText, /nothing was saved|nothing is saved/i, `cancel said: ${cancelledText.slice(0, 90)}`);
+  // wait for the words themselves, not for a DOM side-effect that can land first
+  await page.getByRole("dialog", { name: /assistant/i }).getByText(/nothing was saved/i).waitFor({ timeout: 30000 });
+  await page.waitForFunction(() => !document.querySelector(".chat-meter"), null, { timeout: 20000 });
   const afterCancel = await box();
 
   const states = [["a long reply", afterLong], ["the chip row and meter", withChips], ["cancelling the flow", afterCancel]];
@@ -360,9 +375,9 @@ try {
   assert.equal(motion.heroAnim, "hero-breathe");
   assert.ok(Number(motion.progress) > 0.5, `reading progress line did not advance (${motion.progress})`);
   assert.equal(motion.scrolledClass, true, "header never compacted on scroll");
-  assert.match(motion.stats.join(" "), /8\+/);
-  assert.match(motion.stats.join(" "), /1,000s/);
-  ok(`Motion live: ${motion.rings} contour rings drifting, hero breathing, stats counted to ${motion.stats[0]}/${motion.stats[1]}, progress ${(Number(motion.progress) * 100).toFixed(0)}%`);
+  assert.match(motion.stats.join(" "), /11\+|11/);
+  assert.match(motion.stats.join(" "), /9,400\+?/);
+  ok(`Motion live: ${motion.rings} contour rings drifting, hero breathing, brand marquee running, stats ${motion.stats[0]}/${motion.stats[1]}, progress ${(Number(motion.progress) * 100).toFixed(0)}%`);
 
   // Touch/small screens: ONLY the contour rings stop. Everything else a user sees
   // as "the site is alive" must keep running on a phone.
