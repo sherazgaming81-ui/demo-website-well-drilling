@@ -76,7 +76,7 @@ export function BookingDialog({ initialService = "", onClose }: { initialService
     const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `Aquifer-${reference}.txt`;
+    link.download = `${business.shortName}-${reference}.txt`;
     document.body.appendChild(link);
     link.click();
     link.remove();

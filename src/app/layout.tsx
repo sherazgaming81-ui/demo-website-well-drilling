@@ -38,7 +38,7 @@ export const metadata: Metadata = {
     images: ["/images/hero.jpg"],
   },
   robots: { index: true, follow: true },
-  category: "water well drilling",
+  category: "air conditioning services",
 };
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#f8f9f6" };

@@ -248,7 +248,7 @@ export function ChatWidget({ onBook, variant = "floating" }: { onBook: (serviceI
           <Icon name="droplet" size={17} />
         </span>
         <div className="chat-head-text">
-          <strong>Aquifer Reach Assistant</strong>
+          <strong>{business.shortName} Assistant</strong>
           <span>{busy ? "Typing…" : progress ? progress.label : "Ask away — or say 'book' and I'll take your request"}</span>
         </div>
         {variant === "floating" && (
@@ -368,7 +368,7 @@ export function ChatWidget({ onBook, variant = "floating" }: { onBook: (serviceI
           ref={inputRef}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          placeholder={progress ? "Type your answer, or 'cancel' to stop" : "Ask about your property, or say 'book'…"}
+          placeholder={progress ? "Type your answer, or 'cancel' to stop" : "Ask about your AC, or say 'book'…"}
           maxLength={1500}
           autoComplete="off"
         />

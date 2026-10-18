@@ -111,7 +111,7 @@ export async function createBooking(input: Partial<BookingFields>, requestIdHint
     preferredDate: fields.preferredDate,
     timePreference: fields.timePreference,
     notes: fields.notes.trim(),
-    source: "aquifer-reach-website",
+    source: "freeze-point-website",
   });
 
   return { ok: true, reference: referenceFor(id), created: true, status: 201 };

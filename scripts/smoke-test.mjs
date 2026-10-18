@@ -67,6 +67,23 @@ try {
   assert.deepEqual(brokenAnchors, []);
   ok("All internal navigation targets exist");
 
+  // Inside the open assistant: no leftovers from the previous niche, in the parts
+  // of the page a body-text scan never sees (dialog chrome, placeholders).
+  await page.getByRole("button", { name: "Ask about your AC" }).click();
+  await page.getByRole("dialog", { name: /assistant/i }).waitFor({ state: "visible", timeout: 8000 });
+  const chrome = await page.evaluate(() => {
+    const panel = document.querySelector(".chat-panel");
+    const input = panel.querySelector("input");
+    return `${panel.innerText} ${input?.getAttribute("placeholder") ?? ""}`;
+  });
+  for (const stale of ["Aquifer", "well", "drilling", "estimate form"]) {
+    assert.ok(!new RegExp(stale, "i").test(chrome), `assistant chrome still says: ${stale}`);
+  }
+  assert.match(chrome, /Freeze Point Assistant/);
+  ok("Assistant chrome is fully on-niche (title, greeting, placeholder)");
+  await page.getByRole("button", { name: "Close chat" }).click();
+  await page.waitForTimeout(250);
+
   // Services, dialog, and the estimate request handed over from it.
   assert.equal(await page.locator(".service-card").count(), 6);
   await page.getByRole("button", { name: "Learn more about ac repair", exact: true }).click();
@@ -131,7 +148,7 @@ try {
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download your request summary" }).click();
   const download = await downloadPromise;
-  assert.equal(download.suggestedFilename(), `Aquifer-${reference}.txt`);
+  assert.equal(download.suggestedFilename(), `Freeze Point-${reference}.txt`);
   ok("Downloadable inspection summary for the customer's records");
 
   const payload = sentRequest.postDataJSON();

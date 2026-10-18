@@ -19,7 +19,7 @@ const THINKING_NARRATION =
 const SENTINEL = /\[\[(?:BOOK|SERVICE:[a-z0-9-]+)\]\]/gi;
 
 const SAFE_COST_LINE =
-  "Cost depends on the depth, the casing, the pump system and what your ground is actually doing, so we do not put a number on it before seeing the property \u2014 that is what the free on-site estimate is for.";
+  "Cost depends on the tonnage, the part that has failed, the pipe run and how we reach the outdoor unit, so we do not put a number on it before seeing it for ourselves \u2014 that is what the free inspection is for.";
 
 export type Sanitized = { text: string; changed: boolean; violations: string[] };
 
