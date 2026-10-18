@@ -38,6 +38,18 @@ Design and motion live in `src/app/globals.css`:
 
 `POST /api/bookings` and the chat flow share `src/lib/booking-store.ts`: origin check, JSON-only, size cap, honeypot, per-field validation, `requestId` idempotency, five-per-hour per email, and an optional forward to `LEAD_WEBHOOK_URL`. Storage is process memory only, so a deployment restart clears it — connect a webhook, inbox or database before a real business relies on it.
 
+## Motion
+
+| | |
+|---|---|
+| Everywhere | scroll reveals with a sibling stagger; headings, cards, proof list, gallery and footer each arrive once |
+| Fine pointer + wide window | parallax on the hero, every service image and every gallery tile (one rAF loop writing `--py`, no React state while scrolling); a cold haze trailing the cursor; the frost sweep across the hero photo; the marquee leaning into 3D on hover; card lift and a light sweep; the thermo card glowing and pulsing |
+| Scroll-driven | a process rail whose three segments fill as each step reaches the middle of the viewport, with the active step lifting |
+| Interaction | the work gallery opens a lightbox that FLIP-zooms out of the clicked tile (arrows page, Escape closes, scroll locked, focus returns); a draggable before/after comparison with keyboard support and ARIA slider semantics; buttons press in and their arrows slide; the success tick draws itself; chat bubbles arrive in sequence |
+| Never | on touch devices or under `prefers-reduced-motion`: parallax, the haze, the sweeps and the nudges switch off, while the reveals (which carry meaning) stay |
+
+`smoke-test.mjs` asserts this behaviourally rather than trusting it: that `--py` is actually written, the rail fills, the lightbox locks scroll and closes on Escape, the comparison handle moves from both keys and a drag while `aria-valuenow` stays in step, that no haze is mounted and no transform is written at 390px, and that the run ends with zero console errors.
+
 ## Checks
 
 ```bash
