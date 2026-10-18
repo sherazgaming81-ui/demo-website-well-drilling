@@ -67,13 +67,27 @@ try {
   await page.waitForFunction(() => [...document.querySelectorAll("img")].every((i) => i.complete), null, { timeout: 20000 }).catch(() => {});
 
   const geometry = await page.evaluate(() => {
-    const escaped = [...document.querySelectorAll("img")].filter((img) => {
-      const holder = img.closest(".work-tile, .hero-image, .service-image, .service-dialog-image");
-      if (!holder) return false;
-      const t = holder.getBoundingClientRect();
-      const r = img.getBoundingClientRect();
-      return r.width > 0 && (r.left < t.left - 4 || r.top < t.top - 4 || r.right > t.right + 4 || r.bottom > t.bottom + 4);
-    }).map((img) => img.getAttribute("src")?.slice(0, 60) || "unknown");
+    // An image that is deliberately offset inside a clipping frame is not escaping
+    // it — parallax translates the <img> by up to 16px while the holder clips it.
+    // What would be a bug: a holder that no longer clips, or an image that no
+    // longer covers the frame (letterboxing). Both are checked explicitly.
+    const escaped = [...document.querySelectorAll("img")]
+      .filter((img) => {
+        const holder = img.closest(".work-tile, .hero-image, .service-image, .service-dialog-image");
+        if (!holder) return false;
+        const cs = getComputedStyle(holder);
+        const t = holder.getBoundingClientRect();
+        const r = img.getBoundingClientRect();
+        if (r.width === 0) return false;
+        if (cs.overflow !== "hidden" && cs.overflow !== "clip") return true;
+        const slack = Math.abs(parseFloat(getComputedStyle(img).getPropertyValue("--pa") || "0")) + 6;
+        const covers = r.width >= t.width - 1 && r.height >= t.height - 1;
+        const inside =
+          r.left >= t.left - slack && r.top >= t.top - slack &&
+          r.right <= t.right + slack && r.bottom <= t.bottom + slack;
+        return !(covers && inside);
+      })
+      .map((img) => img.getAttribute("src")?.split("url=")[1]?.slice(0, 40) || "unknown");
     const broken = [...document.querySelectorAll("img")].filter((i) => i.naturalWidth === 0).length;
     const note = document.querySelector(".site-legal-note");
     return { escaped, broken, noteSize: note ? getComputedStyle(note).fontSize : null, scrollW: document.documentElement.scrollWidth, vw: innerWidth };
