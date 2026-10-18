@@ -8,10 +8,11 @@
  */
 
 const PRICE =
-  /(?:\bus\b\s*)?\$\s?\d[\d,]*(?:\.\d{1,2})?(?:\s*(?:to|through|-|\u2013|\u2014)\s*\$?\s?\d[\d,]*(?:\.\d{1,2})?)?|\b\d[\d,]*(?:\.\d{1,2})?\s*(?:usd|dollars?)\b|\b\d[\d,]*(?:\.\d{1,2})?\s*(?:\/\s?ft|per\s+(?:foot|lineal\s+foot|linear\s+foot)|a\s+foot|per\s+(?:month|year)|\/\s?mo(?:nth)?)\b/gi;
+  /(?:\bus\b\s*)?\$\s?\d[\d,]*(?:\.\d{1,2})?(?:\s*(?:to|through|-|\u2013|\u2014)\s*\$?\s?\d[\d,]*(?:\.\d{1,2})?)?|\b(?:Rs|PKR|INR)\.?\s?\d[\d,]*(?:\.\d{1,2})?(?:\s*(?:to|-|\u2013|\u2014)\s?(?:Rs\.?|PKR)?\s?\d[\d,]*)?|\b\d[\d,]*(?:\.\d{1,2})?\s*(?:usd|dollars?|pkr|rupees?|lakh\w*|crore\w*|thousand)\b|\b\d[\d,]*(?:\.\d{1,2})?\s*(?:\/\s?ft|per\s+(?:foot|lineal\s+foot|linear\s+foot|ton|day|hour|visit)|a\s+foot|per\s+(?:month|year)|\/\s?mo(?:nth)?)\b/gi;
 
 const THINKING_BLOCK = /(?:<(?:think(?:ing)?|reasoning|thought|antml:thinking)\b[^>]*>|<\/(?:think(?:ing)?|reasoning|thought|antml:thinking)>)[\s\S]*?(?:<\/(?:think(?:ing)?|reasoning|thought|antml:thinking)>|[\n]{2}<|$)/gi;
-const THINKING_LABEL = /^[ \t]*(?:[\s*(?:thinking|reasoning|plan|scratchpad)\s*]|thinking\s*:|reasoning\s*:|my\s+thoughts\s*:)[ \t]*/im;
+const THINKING_LABEL =
+  /^[ \t]*(?:\[[ \t]*(?:thinking|reasoning|plan|scratchpad)[ \t]*\]|(?:thinking|reasoning|my thoughts|internal monologue)[ \t]*:)[ \t]*/im;
 const THINKING_NARRATION =
   /^[ \t]*(?:let\s+me\s+(?:think|see|break|walk)|i\s+(?:need|must)\s+to\s+(?:answer|respond|think|check)|first[,']?\s+i\s+(?:need|should|will)|the\s+user\s+(?:wants|is\s+asking|needs))[^\n]*\n?/im;
 
@@ -19,9 +20,33 @@ const THINKING_NARRATION =
 const SENTINEL = /\[\[(?:BOOK|SERVICE:[a-z0-9-]+)\]\]/gi;
 
 const SAFE_COST_LINE =
-  "Cost depends on the tonnage, the part that has failed, the pipe run and how we reach the outdoor unit, so we do not put a number on it before seeing it for ourselves \u2014 that is what the free inspection is for.";
+  "Cost depends on the tonnage, the part that has failed, the pipe run and how we reach the outdoor unit, so we do not put a number on it before seeing it ourselves \u2014 that is what the free inspection is for.";
 
 export type Sanitized = { text: string; changed: boolean; violations: string[] };
+
+/* Some reasoning models write their plan into the answer channel itself, where a
+   block matcher cannot see it. Anything along these lines at the head of a reply is
+   the model talking to itself, never something a customer should read, so it comes
+   off line by line until a real sentence starts. */
+const PLAN_LEAD = /^[ \t]*(?:\d{1,2}[.)]\s*)?(?:\*\*)?(?:my (?:role|task|goal|job|approach|plan)|i (?:need|have|must|should|will|’ll|'ll)\b|let me\b|first[,\s]|actually[,\s]|okay[,\s]|so,? i\b|the (?:user|customer) (?:is asking|wants|needs)|i(?:’ll|'ll) (?:answer|respond|say|start))\b/i;
+
+function stripPlanNarration(text: string): { text: string; hit: boolean } {
+  const lines = text.split("\n");
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index].trim();
+    if (!line) {
+      index++;
+      continue;
+    }
+    const numbered = /^\d{1,2}[.)]\s/.test(line);
+    if (!numbered && !PLAN_LEAD.test(line)) break;
+    index++;
+  }
+  const kept = lines.slice(index).join("\n").trim();
+  return { text: kept, hit: index > 0 && kept !== text.trim() };
+}
+
 
 /** Plain text is all the bubble can render, so markdown is flattened, not parsed. */
 function flatten(text: string): string {
@@ -46,10 +71,19 @@ function scrubPrices(text: string): { text: string; hit: boolean } {
     if (!PRICE.test(sentence)) return sentence;
     hit = true;
     if (inserted) return "";
+    // if the sentence next to it already explains what drives cost, deleting the
+    // number is enough; pasting the standard line on top reads like a doubled reply
     inserted = true;
     return SAFE_COST_LINE;
   });
-  return { text: kept.filter(Boolean).join(" ").replace(/\s+/g, " ").trim(), hit };
+  let outLines = kept.filter(Boolean);
+  if (inserted) {
+    const index = outLines.indexOf(SAFE_COST_LINE);
+    const rest = outLines.filter((_, n) => n !== index).join(" ");
+    // no point stating what drives cost twice
+    if (/depends on|comes down to|after (the |an? )?(inspection|visit)/i.test(rest)) outLines.splice(index, 1);
+  }
+  return { text: outLines.join(" ").replace(/\s+/g, " ").trim(), hit };
 }
 
 export function sanitizeAnswer(raw: string): Sanitized {
@@ -72,7 +106,9 @@ export function sanitizeAnswer(raw: string): Sanitized {
   }
   THINKING_NARRATION.lastIndex = 0;
 
-  const scrubbed = scrubPrices(flatten(text));
+  const planned = stripPlanNarration(text);
+  if (planned.hit) violations.push("internal plan removed");
+  const scrubbed = scrubPrices(flatten(planned.text));
   if (scrubbed.hit) violations.push("price figure removed");
 
   const cleaned = scrubbed.text.trim() || SAFE_COST_LINE;

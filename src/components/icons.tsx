@@ -49,7 +49,7 @@ export function BrandMark({ className = "" }: { className?: string }) {
 
 export function BrandLockup({ className = "" }: { className?: string }) {
   // The full logo, generated with the wordmark, on a transparent plate.
-  return <Image className={`brand-logo${className ? ` ${className}` : ""}`} src="/logo.webp" alt={`${business.name} — ${business.city}`} width={1098} height={351} sizes="(max-width: 1180px) 210px, 250px" priority draggable={false} />;
+  return <Image className={`brand-logo${className ? ` ${className}` : ""}`} src="/logo.webp" alt={`${business.name} — ${business.city}`} width={1047} height={426} sizes="(max-width: 760px) 0px, 190px" priority draggable={false} />;
 }
 
 export function Brand({ light = false }: { light?: boolean }) {

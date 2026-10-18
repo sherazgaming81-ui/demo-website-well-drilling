@@ -4,11 +4,15 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import { BookingDialog } from "@/components/booking-dialog";
 import { ChatWidget } from "@/components/chat-widget";
+import { BeforeAfter } from "@/components/before-after";
+import { ColdMist } from "@/components/cold-mist";
 import { CountUp } from "@/components/count-up";
+import { WorkGallery } from "@/components/work-gallery";
 import { Brand, BrandMark, Contours, Icon, type IconName } from "@/components/icons";
 import { Modal } from "@/components/modal";
 import { brands, business, faqs, projects, proofPoints, services, stats, steps } from "@/lib/site-data";
 import { rv, useReveals, useScrollFx } from "@/lib/use-reveals";
+import { useFinePointer, useParallax, useStepRail } from "@/lib/use-motion";
 
 const navigation = [
   { label: "Our services", href: "#services" },
@@ -31,7 +35,10 @@ export default function HomePage() {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [legal, setLegal] = useState<"privacy" | "terms" | null>(null);
   const scrolled = useScrollFx();
+  const finePointer = useFinePointer();
   useReveals();
+  useParallax(finePointer);
+  const rail = useStepRail(steps.length);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -78,7 +85,7 @@ export default function HomePage() {
             <div className="hero-trust" {...rv(9)}><div className="avatar-stack">{projects.slice(1, 4).map((project) => <Image key={project.image} src={project.image} width={36} height={36} alt="" />)}</div><div><div className="hero-rating"><Icon name="snowflake" size={13} /><span><strong>{stats[0].value} years</strong> in {business.city} · {stats[1].value.split("+")[0]}+ units</span></div><p>Licensed technicians, genuine parts, and a 90-day workmanship warranty on the job card.</p></div></div>
           </div>
           <div className="hero-visual" {...rv(2)}>
-            <div className="hero-image"><Image src="/images/hero.jpg" alt="A Freeze Point technician servicing an outdoor air conditioner condenser on a Karachi rooftop" fill priority sizes="(max-width: 760px) 100vw, 50vw" /><div className="image-shade" /><span className="image-pill"><span />SAME-DAY IN KARACHI</span><span className="image-caption">YOUR HOME.<br />COOLED PROPERLY.</span></div>
+            <div className="hero-image"><Image data-parallax="" style={{ "--pa": "10px" } as never} src="/images/hero.jpg" alt="A Freeze Point technician servicing an outdoor air conditioner condenser on a Karachi rooftop" fill priority sizes="(max-width: 760px) 100vw, 50vw" /><div className="image-shade" /><span className="image-pill"><span />SAME-DAY IN KARACHI</span><span className="image-caption">YOUR HOME.<br />COOLED PROPERLY.</span></div>
             <div className="hero-note"><span className="hero-note-icon"><Icon name="shield" size={27} /></span><div><strong>Tested, not guessed.</strong><span>Readings before and after, on your job card.</span></div><span className="note-dot" /></div>
             <p className="photo-caption"><span />REAL JOBS. KARACHI HEAT.</p>
           </div>
@@ -101,7 +108,7 @@ export default function HomePage() {
       <section id="services" className="section services-section" aria-labelledby="services-title">
         <div className="container">
           <div className="section-heading"><div {...rv(0)}><p className="eyebrow eyebrow-line">WHAT WE DO</p><h2 id="services-title">Making cold air is easy.<br />Finding the fault isn’t.</h2></div><p>Split, inverter, cassette or ducted —<br className="desktop-break" /> we measure first, then fix what is actually broken.</p></div>
-          <div className="services-grid">{services.map((service, index) => <article className="service-card" key={service.id} {...rv(index)}><div className="service-image"><Image src={service.image} alt={service.alt} fill sizes="(max-width: 760px) 100vw, 33vw" /><span className="service-number">{service.number} / OUR SERVICES</span></div><div className="service-content"><p className="service-category">{service.category}</p><h3>{service.title}</h3><p className="service-description">{service.description}</p><button className="service-link" onClick={() => setSelectedService(service)} aria-label={`Learn more about ${service.title.toLowerCase()}`}>{service.link}<span><Icon name="arrow-up-right" size={17} /></span></button></div></article>)}</div>
+          <div className="services-grid">{services.map((service, index) => <article className="service-card" key={service.id} {...rv(index)}><div className="service-image"><Image data-parallax="" style={{ "--pa": "16px" } as never} src={service.image} alt={service.alt} fill sizes="(max-width: 760px) 100vw, 33vw" /><span className="service-number">{service.number} / OUR SERVICES</span></div><div className="service-content"><p className="service-category">{service.category}</p><h3>{service.title}</h3><p className="service-description">{service.description}</p><button className="service-link" onClick={() => setSelectedService(service)} aria-label={`Learn more about ${service.title.toLowerCase()}`}>{service.link}<span><Icon name="arrow-up-right" size={17} /></span></button></div></article>)}</div>
           <p className="services-footnote" {...rv(6)}><Icon name="shield" size={16} />Inspected, quoted in writing, and tested in front of you.</p>
         </div>
       </section>
@@ -112,11 +119,28 @@ export default function HomePage() {
       </section>
 
       <section id="process" className="section process-section" aria-labelledby="process-title">
-        <div className="container"><div className="center-heading" {...rv(0)}><p className="eyebrow">LESS GUESSWORK. MORE COLD AIR.</p><h2 id="process-title">A short call.<br />A room that stays cold.</h2><p>Big repair bills feel smaller when you know what is wrong before anyone starts.</p></div><div className="process-grid">{steps.map((step, index) => <article className="process-step" key={step.title} {...rv(index)}><div className="step-top"><span className="process-icon"><Icon name={step.icon} size={25} /></span><span className="step-line" /><span className="process-number">STEP 0{index + 1}</span></div><h3>{step.title}</h3><p>{step.description}</p></article>)}</div><div className="process-bottom"><button className="button button-primary" onClick={() => openBooking()}>Request my free inspection<Icon name="arrow-up-right" size={18} /></button><span><Icon name="clock" size={14} />Monday–Saturday 9 am–9 pm · Sunday emergency call-out</span></div></div>
+        <div className="container"><div className="center-heading" {...rv(0)}><p className="eyebrow">LESS GUESSWORK. MORE COLD AIR.</p><h2 id="process-title">A short call.<br />A room that stays cold.</h2><p>Big repair bills feel smaller when you know what is wrong before anyone starts.</p></div><div className="process-rail" aria-hidden="true">{steps.map((step, index) => <i key={step.title} className={rail.active >= index ? "is-on" : ""} />)}</div><div className="process-grid">{steps.map((step, index) => <article ref={rail.setRef(index)} className={`process-step${rail.active === index ? " is-active" : ""}`} key={step.title} {...rv(index)}><div className="step-top"><span className="process-icon"><Icon name={step.icon} size={25} /></span><span className="step-line" /><span className="process-number">STEP 0{index + 1}</span></div><h3>{step.title}</h3><p>{step.description}</p></article>)}</div><div className="process-bottom"><button className="button button-primary" onClick={() => openBooking()}>Request my free inspection<Icon name="arrow-up-right" size={18} /></button><span><Icon name="clock" size={14} />Monday–Saturday 9 am–9 pm · Sunday emergency call-out</span></div></div>
       </section>
 
       <section id="work" className="reviews-section" aria-labelledby="work-title">
-        <div className="container reviews-grid work-row"><div className="reviews-intro" {...rv(0)}><p className="eyebrow eyebrow-line">OUR WORK</p><h2 id="work-title">Real jobs.<br />Karachi heat.</h2><p>Rooftop condensers at 3 pm, choked coils, boards on the bench and new units levelled on a wall. A look at recent work across the city.</p><div className="reviews-score"><strong>{stats[1].value}</strong><div><span>Units serviced since {business.established}</span><span>{stats[2].value} warranty on workmanship</span></div></div></div><div className="work-grid">{projects.map((project, index) => <figure className="work-tile" key={project.image} {...rv(index)}><Image src={project.image} alt={project.alt} fill sizes="(max-width: 760px) 100vw, 60vw" /><figcaption>{project.caption}</figcaption></figure>)}</div></div>
+        <div className="container reviews-grid work-row"><div className="reviews-intro" {...rv(0)}><p className="eyebrow eyebrow-line">OUR WORK</p><h2 id="work-title">Real jobs.<br />Karachi heat.</h2><p>Rooftop condensers at 3 pm, choked coils, boards on the bench and new units levelled on a wall. A look at recent work across the city.</p><div className="reviews-score"><strong>{stats[1].value}</strong><div><span>Units serviced since {business.established}</span><span>{stats[2].value} warranty on workmanship</span></div></div></div><WorkGallery /></div>
+      </section>
+
+      <section className="section ba-wrap" aria-labelledby="ba-title">
+        <div className="container ba-section">
+          <div {...rv(0)}>
+            <p className="eyebrow eyebrow-line">WHAT A SERVICE ACTUALLY DOES</p>
+            <h2 id="ba-title">Same unit.<br />Two different machines.</h2>
+            <p>A choked coil and a clean one are the same AC on paper, and nothing like it on your meter. Drag the handle — the dust is the whole story.</p>
+            <p className="ba-note"><Icon name="check" size={13} />Illustrative images on this demonstration site; a real report comes with your own unit&apos;s readings.</p>
+          </div>
+          <BeforeAfter
+            before="/images/coil-dirty.jpg"
+            after="/images/coil-clean.jpg"
+            beforeAlt="A wall-split indoor unit with dust-caked coils, a grimy blower wheel and a dirty filter"
+            afterAlt="The same wall-split indoor unit after jet cleaning, with bright clean fins and a white blower wheel"
+          />
+        </div>
       </section>
 
       <section id="faq" className="section faq-section" aria-labelledby="faq-title"><div className="container faq-grid"><div {...rv(0)}><p className="eyebrow eyebrow-line">CLEAR ANSWERS. RIGHT HERE.</p><h2 id="faq-title">Questions we get<br />every summer.</h2><p className="faq-intro">Never had an AC serviced? You’re in good company.<br />Let’s get beneath the surface.</p><button className="inline-link" onClick={() => openBooking()}>Something not covered here? Ask us with your request<Icon name="arrow-up-right" size={16} /></button></div><div className="faq-list">{faqs.map((faq, index) => <article className={`faq-item ${openFaq === index ? "is-open" : ""}`} key={faq.question} {...rv(index)}><h3><button id={`faq-question-${index}`} aria-expanded={openFaq === index} aria-controls={`faq-answer-${index}`} onClick={() => setOpenFaq(openFaq === index ? null : index)}>{faq.question}<span><Icon name={openFaq === index ? "minus" : "plus"} size={17} /></span></button></h3><div id={`faq-answer-${index}`} role="region" aria-labelledby={`faq-question-${index}`} hidden={openFaq !== index}><p className="faq-answer">{faq.answer}</p></div></article>)}</div></div></section>
@@ -128,6 +152,7 @@ export default function HomePage() {
 
     {bookingOpen && <BookingDialog initialService={bookingService} onClose={() => setBookingOpen(false)} />}
     <ChatWidget onBook={(serviceId) => openBooking(serviceId ?? "")} />
+    <ColdMist />
     {selectedService && <Modal onClose={() => setSelectedService(null)} labelledBy="service-dialog-title" className="service-modal"><div className="service-dialog-image"><Image src={selectedService.image} alt={selectedService.alt} fill sizes="680px" /></div><div className="service-dialog-content"><p className="eyebrow">{selectedService.category}</p><h2 id="service-dialog-title">{selectedService.title}</h2><p>{selectedService.detail}</p><h3>What working with us looks like</h3><ul>{selectedService.benefits.map((benefit) => <li key={benefit}><span><Icon name="check" size={14} /></span>{benefit}</li>)}</ul><button className="button button-primary" onClick={() => openBooking(selectedService.id)}>Request an inspection for this<Icon name="arrow-up-right" size={18} /></button><p className="service-dialog-note">The visit is free and the quote is written before any work starts. Access to the outdoor unit or roof, and power to the indoor unit, make the inspection quicker.</p></div></Modal>}
     {legal && <Modal onClose={() => setLegal(null)} labelledBy="legal-title" className="legal-modal"><p className="eyebrow">{business.name.toUpperCase()} · {legal === "privacy" ? "PRIVACY" : "TERMS"}</p><h2 id="legal-title">{legal === "privacy" ? "Your privacy matters." : "A few clear ground rules."}</h2>{legal === "privacy" ? <><p>The inspection request collects only what we need to reach you and come out: name, phone, email, your area or postal code, which service you want, a preferred date and time, and any notes you add.</p><h3>How it is used</h3><p>To book the visit and prepare for it. Nothing is sold, shared with advertisers or added to a marketing list, and this site carries no advertising trackers or analytics scripts.</p><h3>Where it is stored</h3><p>If the owner has connected an inbox, CRM or storage service, requests are delivered there so a person can follow up. Otherwise they are held only in the web server’s short-lived memory and disappear when it restarts. Please don’t send sensitive personal or financial information.</p><h3>Your choices</h3><p>Nothing is recorded until you press submit, and a half-finished form is never stored. To have a request deleted, call {business.phoneDisplay} and we will handle it.</p><h3>On this demonstration build</h3><p>This is a portfolio site: the brand, numbers and photography are illustrative, so please don’t send a real address or personal details through this form.</p></> : <><p>This website gives general information about air-conditioning repair, installation and maintenance in {business.city}.</p><h3>Inspections and quotes</h3><p>The on-site inspection is free and does not commit you to anything. Work starts only after you approve a written quote. Anything quoted before a visit is an estimate, not a fixed price.</p><h3>What a warranty covers</h3><p>The 90-day warranty covers our workmanship — the repair, the joint, the charge, the bracket — with the parts warranty passed through from whoever made the part. It does not cover a different fault appearing elsewhere, supply voltage damage, or a unit whose filters were never cleaned.</p><h3>Realistic expectations</h3><p>No technician can guarantee a cooling capacity, a power-bill figure or how long a compressor will last. What we can do is test it, show you the readings, and tell you honestly when a unit is past being worth repairing.</p><h3>Availability</h3><p>Same-day visits depend on crew routes and the season. A submitted request confirms your interest, not a booked slot — we call to confirm the time.</p></>}<button className="button button-primary" onClick={() => setLegal(null)}>Got it<Icon name="check" size={17} /></button></Modal>}
   </>;

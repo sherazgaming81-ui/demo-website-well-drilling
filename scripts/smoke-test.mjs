@@ -51,9 +51,24 @@ try {
     assert.equal(res.status(), 200, `optimizer request failed for ${path}`);
   }
   assert.ok(paths.length >= 7, `expected the seven distinct photos to be referenced, saw ${paths.length}`);
-  const fontLoaded = await page.evaluate(() => document.fonts.check('700 16px "DM Sans"'));
-  assert.equal(fontLoaded, true, "self-hosted DM Sans did not load");
-  ok(`${media.length} images decoded, no 404s, DM Sans active`);
+  // check() answers true for families that are simply not declared, so assert on the
+  // loaded set instead: both self-hosted faces must exist and be actually used
+  const fonts = await page.evaluate(() => {
+    const families = new Set();
+    document.fonts.forEach((face) => families.add(face.family));
+    const h1 = document.querySelector("h1 > span");
+    const body = document.body;
+    return {
+      families: [...families],
+      display: h1 ? getComputedStyle(h1).fontFamily : "",
+      body: getComputedStyle(body).fontFamily,
+    };
+  });
+  assert.ok(fonts.families.includes("Freeze Display"), `display face missing: ${fonts.families.join(", ")}`);
+  assert.ok(fonts.families.includes("Freeze Body"), `body face missing: ${fonts.families.join(", ")}`);
+  assert.match(fonts.display, /Freeze Display/);
+  assert.match(fonts.body, /Freeze Body/);
+  ok(`${media.length} images decoded, no 404s, both self-hosted faces loaded and applied`);
 
   const marquee = await page.evaluate(() => {
     const track = document.querySelector(".marquee-track");
@@ -90,7 +105,7 @@ try {
   await page.getByRole("dialog", { name: /assistant/i }).waitFor({ state: "visible", timeout: 8000 });
   await page.getByRole("textbox", { name: "Your question" }).fill("Reply with exactly one short sentence that starts with the word Installation.");
   await page.getByRole("button", { name: "Send your question" }).click();
-  await page.waitForFunction(() => { const el = [...document.querySelectorAll(".chat-row-assistant .chat-bubble")].pop(); return el && el.textContent.trim().length > 12 && !document.querySelector(".chat-typing"); }, null, { timeout: 90000 }).catch(() => {});
+  await page.waitForFunction(() => { const el = [...document.querySelectorAll(".chat-row-assistant .chat-bubble")].pop(); return !document.querySelector(".chat-send.is-stop") && el && el.textContent.trim().length > 12 && !document.querySelector(".chat-typing"); }, null, { timeout: 90000 }).catch(() => {});
   const firstWords = await page.evaluate(() => {
     const el = [...document.querySelectorAll(".chat-row-assistant .chat-bubble")].pop();
     const text = (el?.textContent || "").trim();
@@ -98,7 +113,9 @@ try {
     return { head: text.slice(0, 24), tagLeak: /think/.test(panel.innerText) };
   });
   assert.equal(firstWords.tagLeak, false, "a model tag reached the visible chat");
-  assert.match(firstWords.head, /Installation|install|\bI\b/, `answer begins mid-word: ${firstWords.head}`);
+  // an eaten leading character shows up as a lowercase or clipped start; model
+  // phrasing itself is not what this guards
+  assert.match(firstWords.head.trim(), /^[A-Z]/, `answer begins mid-word: ${firstWords.head}`);
   ok(`Streamed answer keeps its first character and shows no tags ("${firstWords.head.trim()}")`);
   await page.getByRole("button", { name: "Close chat" }).click();
   await page.waitForTimeout(250);
@@ -241,10 +258,11 @@ try {
     page.waitForFunction(
       () => {
         const bubble = [...document.querySelectorAll(".chat-row-assistant .chat-bubble")].pop();
-        return bubble && bubble.textContent.trim().length > 20 && !document.querySelector(".chat-typing");
+        const streaming = Boolean(document.querySelector(".chat-send.is-stop"));
+        return !streaming && bubble && bubble.textContent.trim().length > 20 && !document.querySelector(".chat-typing");
       },
       null,
-      { timeout: 45000 },
+      { timeout: 120000 },
     );
   const answer = async (text) => {
     await page.getByRole("textbox", { name: "Your question" }).fill(text);
@@ -290,7 +308,7 @@ try {
   const beforeBox = await box();
   await page.getByRole("textbox", { name: "Your question" }).fill("Tell me in detail how a new screen well works in Florida sand, step by step.");
   await page.getByRole("button", { name: "Send your question" }).click();
-  await page.waitForFunction(() => { const el = [...document.querySelectorAll(".chat-row-assistant .chat-bubble")].pop(); return el && el.textContent.trim().length > 120 && !document.querySelector(".chat-typing"); }, null, { timeout: 60000 });
+  await page.waitForFunction(() => { const el = [...document.querySelectorAll(".chat-row-assistant .chat-bubble")].pop(); return !document.querySelector(".chat-send.is-stop") && el && el.textContent.trim().length > 120 && !document.querySelector(".chat-typing"); }, null, { timeout: 60000 });
   const afterLong = await box();
 
   await page.getByRole("textbox", { name: "Your question" }).fill("ok book me");
@@ -351,11 +369,16 @@ try {
   });
   assert.ok(pageGeom && pageGeom.width >= 700, `assistant page panel is only ${pageGeom?.width}px wide`);
   assert.equal(pageGeom?.overflow, 0, "the assistant page overflows horizontally");
-  await page.getByRole("textbox", { name: "Your question" }).fill("Do you cover St Augustine?");
+  await page.getByRole("textbox", { name: "Your question" }).fill("Do you cover Clifton?");
   await page.getByRole("button", { name: "Send your question" }).click();
   await settle();
+  const pageAnswerStatus = await page.evaluate(() => ({
+    pending: Boolean(document.querySelector(".chat-typing")),
+    count: document.querySelectorAll(".chat-row-assistant .chat-bubble").length,
+    rate: window.__lastChatStatus,
+  }));
   const onPage = await page.locator(".chat-row-assistant .chat-bubble").last().innerText();
-  assert.ok(onPage.length > 30, "the assistant page did not answer");
+  assert.ok(onPage.length > 30, `the assistant page did not answer — got ${JSON.stringify(onPage.slice(0, 120))} / status=${pageAnswerStatus}`);
   await page.screenshot({ path: "artifacts/assistant-page.png" });
   ok(`Assistant page works on its own (${pageGeom.width}px panel, answered in ${onPage.split(" ").length} words)`);
 
@@ -387,6 +410,103 @@ try {
   // Motion is desktop-only by design, so measure it at a desktop width first.
   await page.setViewportSize({ width: 1456, height: 900 });
   await page.waitForTimeout(250);
+  // ── New motion: parallax, rail, lightbox, before/after, cursor haze ─────
+  const motionChecks = await page.evaluate(() => {
+    const px = document.querySelector("[data-parallax]");
+    const railOn = document.querySelectorAll(".process-rail i.is-on").length;
+    return {
+      parallaxVar: px ? (px.getAttribute("style") || "") : "missing",
+      hasParallaxNodes: document.querySelectorAll("[data-parallax]").length,
+      railSegments: document.querySelectorAll(".process-rail i").length,
+      railOn,
+      mist: Boolean(document.getElementById("cold-mist")),
+      slider: Boolean(document.querySelector(".ba-handle[role='slider']")),
+    };
+  });
+  assert.ok(motionChecks.hasParallaxNodes >= 7, `expected hero + six service images to be parallax-wired, saw ${motionChecks.hasParallaxNodes}`);
+  assert.equal(motionChecks.mist, true, "the cursor haze is missing on a fine pointer");
+  assert.equal(motionChecks.slider, true, "the before/after handle is missing");
+
+  await page.evaluate(() => document.querySelector("#process")?.scrollIntoView({ block: "center", behavior: "instant" }));
+  await page.waitForTimeout(700);
+  const railNow = await page.evaluate(() => document.querySelectorAll(".process-rail i.is-on").length);
+  assert.ok(railNow >= 1 && railNow <= motionChecks.railSegments, `rail progress out of range: ${railNow}/${motionChecks.railSegments}`);
+  assert.match(await page.evaluate(() => document.querySelector("[data-parallax]")?.getAttribute("style") ?? ""), /--py: -?\d+(\.\d+)?/, "parallax never wrote a value");
+  ok(`Parallax driving ${motionChecks.hasParallaxNodes} layers, process rail at ${railNow}/${motionChecks.railSegments}, cursor haze mounted`);
+
+  // cursor haze follows the pointer
+  const before = await page.evaluate(() => document.getElementById("cold-mist")?.style.transform ?? "");
+  await page.mouse.move(300, 300); await page.waitForTimeout(120);
+  await page.mouse.move(1000, 620); await page.waitForTimeout(450);
+  const after = await page.evaluate(() => ({ t: document.getElementById("cold-mist")?.style.transform ?? "", on: document.getElementById("cold-mist")?.classList.contains("is-on") }));
+  assert.notEqual(after.t, before, "the haze did not move with the pointer");
+  assert.equal(after.on, true, "the haze never switched on");
+
+  // lightbox: shared-element zoom + keyboard + focus return
+  await page.evaluate(() => document.querySelector("#work")?.scrollIntoView({ block: "center", behavior: "instant" }));
+  await page.waitForTimeout(300);
+  await page.locator(".work-tile button").first().click();
+  await page.getByRole("dialog", { name: /open photo|clifton/i }).waitFor({ state: "visible", timeout: 6000 }).catch(async () => {
+    await page.locator(".work-lightbox").waitFor({ state: "visible", timeout: 4000 });
+  });
+  const lb = await page.evaluate(() => {
+    const img = document.querySelector(".work-lightbox-figure img");
+    return {
+      open: Boolean(document.querySelector(".work-lightbox")),
+      locked: document.body.style.overflow,
+      // the FLIP must be the only thing animating: a duplicated view-transition-name
+      // is what made the browser abort the transition and log an error on every open
+      staleNames: document.querySelectorAll("[style*='view-transition-name']").length,
+      animating: typeof img?.getAnimations === "function" ? img.getAnimations().length : 0,
+      radius: img ? getComputedStyle(img).borderRadius : "none",
+    };
+  });
+  assert.equal(lb.open, true, "the lightbox did not open");
+  assert.equal(lb.locked, "hidden", "background scroll was not locked while the lightbox was open");
+  assert.equal(lb.staleNames, 0, "a stray view-transition-name is still set");
+  assert.notEqual(lb.radius, "0px", "the lightbox image lost its rounding");
+  await page.keyboard.press("ArrowRight");
+  await page.waitForTimeout(350);
+  assert.match(await page.locator(".work-lightbox-bar span").first().innerText(), /2 \/ 6/, "arrow keys do not page through the gallery");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(400);
+  assert.equal(await page.locator(".work-lightbox").count(), 0, "Escape did not close the lightbox");
+  ok("Lightbox: FLIP-zooms from the clicked tile, pages with arrows, locks scroll, closes on Escape");
+
+  // before/after: keyboard and pointer both move the divider
+  await page.evaluate(() => document.querySelector(".ba")?.scrollIntoView({ block: "center", behavior: "instant" }));
+  await page.waitForTimeout(400);
+  await page.locator(".ba-handle").focus();
+  const startAt = await page.evaluate(() => document.querySelector(".ba-clip").style.width);
+  await page.keyboard.press("ArrowRight"); await page.keyboard.press("ArrowRight");
+  await page.waitForTimeout(250);
+  const keyAt = await page.evaluate(() => document.querySelector(".ba-clip").style.width);
+  assert.notEqual(keyAt, startAt, "arrow keys do not move the comparison handle");
+  const baBox = await page.locator(".ba").boundingBox();
+  await page.mouse.move(baBox.x + baBox.width * 0.78, baBox.y + baBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(baBox.x + baBox.width * 0.22, baBox.y + baBox.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForTimeout(250);
+  const dragAt = await page.evaluate(() => ({ w: document.querySelector(".ba-clip").style.width, aria: document.querySelector(".ba-handle").getAttribute("aria-valuenow") }));
+  assert.ok(parseFloat(dragAt.w) < 35, `drag did not close the before side (${dragAt.w})`);
+  assert.equal(dragAt.aria, Math.round(parseFloat(dragAt.w)).toString(), "aria-valuenow drifted from the visual position");
+  ok(`Before/after slider responds to keys and drag (${startAt} → ${dragAt.w}, announced as ${dragAt.aria}%)`);
+
+  // on a phone: the haze is not mounted at all and parallax writes no transform
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(300);
+  const phoneState = await page.evaluate(() => ({
+    mist: Boolean(document.getElementById("cold-mist")),
+    pxTransform: (() => { const el = document.querySelector("[data-parallax]"); return el ? getComputedStyle(el).transform : "none"; })(),
+    baCursor: getComputedStyle(document.querySelector(".ba")).cursor,
+  }));
+  assert.equal(phoneState.mist, false, "the cursor haze is still mounted in a narrow window");
+  assert.ok(phoneState.pxTransform === "none" || phoneState.pxTransform.endsWith(") 0px)"), `parallax still transforming on mobile: ${phoneState.pxTransform}`);
+  ok("Phone: no cursor haze, parallax transform neutralised");
+  await page.setViewportSize({ width: 1456, height: 900 });
+  await page.waitForTimeout(200);
+
   // Motion state is only meaningful mid-page: scroll to 60% and let the
   // rAF-throttled listener run before reading --scroll and the compact header.
   await page.evaluate(() => document.documentElement.scrollTo({ top: Math.round(document.documentElement.scrollHeight * 0.6), behavior: "instant" }));
