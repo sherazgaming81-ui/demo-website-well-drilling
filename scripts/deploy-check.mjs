@@ -16,7 +16,7 @@ const check = (name, pass, extra = "") => {
 
 const html = await (await fetch(`${base}/`, { headers: { "User-Agent": "Mozilla/5.0" } })).text();
 check("homepage responds", html.length > 5000, `${html.length} bytes`);
-check("serves the real business title", /<title>Aquifer Reach LLC/.test(html));
+check("serves the real business title", /<title>Freeze Point AC Care/.test(html));
 check("no demo/fictional copy left", !/demonstration brand|fictional demonstration|hello@aquifer\.example|\(888\) 555-0142/i.test(html));
 
 // A canonical that points at a host nobody serves is worse than no canonical.
@@ -41,7 +41,9 @@ const assets = [...new Set([...html.matchAll(/images%2F([a-z0-9-]+\.jpg)/g)].map
 // wolf. Whatever the page asks for must answer 200.
 const icons = [...new Set([...html.matchAll(/<link[^>]+href="(\/[^"]*(?:icon|apple-icon)[^"]*\.(?:svg|png|ico))"/g)].map((m) => m[1]))];
 check("page links at least one icon", icons.length > 0, icons.join(", ") || "none");
-for (const path of ["/fonts/dm-sans.ttf", ...icons, "/robots.txt", "/sitemap.xml", ...assets]) {
+const fonts = [...new Set([...css.matchAll(/url\(([^)]*\/fonts\/[^)]+)\)/g)].map((m) => m[1].replace(/["']/g, "")))];
+check("stylesheet references the self-hosted fonts", fonts.length >= 2, fonts.join(", ") || "none found");
+for (const path of [...fonts, ...icons, "/robots.txt", "/sitemap.xml", ...assets]) {
   const res = await fetch(base + path, { method: "GET" });
   check(`asset ${path}`, res.status === 200, String(res.status));
 }
