@@ -84,6 +84,25 @@ try {
   await page.getByRole("button", { name: "Close chat" }).click();
   await page.waitForTimeout(250);
 
+  // Regression guard: the answer must not begin inside a word (a streaming
+  // scrubber once swallowed the leading capital I of "Installation cost …").
+  await page.getByRole("button", { name: "Ask about your AC" }).click();
+  await page.getByRole("dialog", { name: /assistant/i }).waitFor({ state: "visible", timeout: 8000 });
+  await page.getByRole("textbox", { name: "Your question" }).fill("Reply with exactly one short sentence that starts with the word Installation.");
+  await page.getByRole("button", { name: "Send your question" }).click();
+  await page.waitForFunction(() => { const el = [...document.querySelectorAll(".chat-row-assistant .chat-bubble")].pop(); return el && el.textContent.trim().length > 12 && !document.querySelector(".chat-typing"); }, null, { timeout: 90000 }).catch(() => {});
+  const firstWords = await page.evaluate(() => {
+    const el = [...document.querySelectorAll(".chat-row-assistant .chat-bubble")].pop();
+    const text = (el?.textContent || "").trim();
+    const panel = document.querySelector(".chat-panel");
+    return { head: text.slice(0, 24), tagLeak: /think/.test(panel.innerText) };
+  });
+  assert.equal(firstWords.tagLeak, false, "a model tag reached the visible chat");
+  assert.match(firstWords.head, /Installation|install|\bI\b/, `answer begins mid-word: ${firstWords.head}`);
+  ok(`Streamed answer keeps its first character and shows no tags ("${firstWords.head.trim()}")`);
+  await page.getByRole("button", { name: "Close chat" }).click();
+  await page.waitForTimeout(250);
+
   // Services, dialog, and the estimate request handed over from it.
   assert.equal(await page.locator(".service-card").count(), 6);
   await page.getByRole("button", { name: "Learn more about ac repair", exact: true }).click();

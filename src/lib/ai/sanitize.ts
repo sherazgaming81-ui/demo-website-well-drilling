@@ -145,12 +145,13 @@ export function createThinkScrubber() {
 
         const start = buffer.indexOf(OPEN_TOKEN);
         if (start === -1) {
-          for (let len = OPEN_TOKEN.length - 1; len > 1; len--) {
-            if (buffer.endsWith(OPEN_TOKEN.slice(0, len))) {
-              carry = buffer.slice(buffer.length - len);
-              buffer = buffer.slice(0, buffer.length - len);
-              break;
-            }
+          // Hold back a trailing fragment only if it actually starts the tag.
+          // Matching every prefix swallowed ordinary letters ("t", "h") and ate
+          // the first character of answers that began with a capital I.
+          if (buffer.endsWith(OPEN_TOKEN.slice(0, -1)) || buffer.endsWith(OPEN_TOKEN.slice(0, 2))) {
+            const len = buffer.endsWith(OPEN_TOKEN.slice(0, -1)) ? OPEN_TOKEN.length - 1 : 2;
+            carry = buffer.slice(buffer.length - len);
+            buffer = buffer.slice(0, buffer.length - len);
           }
           return visible + buffer;
         }
