@@ -43,7 +43,9 @@ const icons = [...new Set([...html.matchAll(/<link[^>]+href="(\/[^"]*(?:icon|app
 check("page links at least one icon", icons.length > 0, icons.join(", ") || "none");
 const fonts = [...new Set([...css.matchAll(/url\(([^)]*\/fonts\/[^)]+)\)/g)].map((m) => m[1].replace(/["']/g, "")))];
 check("stylesheet references the self-hosted fonts", fonts.length >= 2, fonts.join(", ") || "none found");
-for (const path of [...fonts, ...icons, "/robots.txt", "/sitemap.xml", ...assets]) {
+const manifestHref = html.match(/rel="manifest" href="([^"]+)"/)?.[1];
+check("page links a web app manifest", Boolean(manifestHref), manifestHref ?? "no link rel=manifest");
+for (const path of [...fonts, ...icons, manifestHref, "/robots.txt", "/sitemap.xml", ...assets].filter(Boolean)) {
   const res = await fetch(base + path, { method: "GET" });
   check(`asset ${path}`, res.status === 200, String(res.status));
 }
