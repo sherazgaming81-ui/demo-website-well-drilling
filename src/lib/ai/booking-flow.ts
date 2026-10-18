@@ -71,18 +71,38 @@ export function progressOf(session: FlowSession) {
   return { stage: session.stage, label: `Step ${index + 1} of ${ORDER.length} · ${LABEL[session.stage]}` };
 }
 
+/**
+ * Maps free text to a service id.
+ *
+ * Deliberately driven by bookingServices in src/lib/site-data.ts rather than a
+ * hand-written keyword table: swapping the niche must not require editing this
+ * file, and a hard-coded list is exactly how a "rock well" rule survived the last
+ * rebrand and silently swallowed an "inverter board" answer.
+ */
+/** The opening question, worded from the current service list. */
+function serviceQuestion(): string {
+  const labels = bookingServices.filter((option) => option.value !== "not-sure").map((option) => option.label.toLowerCase());
+  return `Which do you need — ${labels.slice(0, -1).join(", ")} or ${labels[labels.length - 1]}? If none of those fit, say so and we will work it out.`;
+}
+
 function matchService(text: string): string | undefined {
-  const t = text.toLowerCase();
-  const direct = bookingServices.find((option) => t.includes(option.value) || t.includes(option.label.toLowerCase()));
-  if (direct) return direct.value;
-  if (/\b(not sure|unsure|idk|no idea|advice|help me decide|both|any|depends)\b/.test(t)) return "not-sure";
-  if (/rock/.test(t)) return "rock-wells";
-  if (/screen|sandy/.test(t)) return "screen-wells";
-  if (/artesian|pressur/.test(t)) return "artesian-wells";
-  if (/salt|pepper|irrigat|livestock|cattle/.test(t)) return "salt-pepper-wells";
-  if (/pump|pressure|repair|replace/.test(t)) return "pump-installation";
-  if (/abandon|seal|old well|unused/.test(t)) return "well-abandonment";
-  return undefined;
+  const t = text.toLowerCase().replace(/[^a-z0-9&\s-]/g, " ").replace(/\s+/g, " ").trim();
+  if (!t) return undefined;
+
+  const exact = bookingServices.find((option) => t.includes(option.value) || t.includes(option.label.toLowerCase()));
+  if (exact) return exact.value;
+  if (/\b(not sure|unsure|idk|no idea|advice|help me decide|what do you think|depends)\b/.test(t)) return "not-sure";
+
+  // Score by how many meaningful words of each label the message contains.
+  const stop = new Set(["the", "a", "an", "my", "i", "to", "of", "for", "and", "or", "is", "it", "in", "on", "need", "want", "wanting", "please", "have", "has", "not", "no", "get", "too", "but", "with", "from", "new", "just", "some", "ac", "air", "conditioner", "unit"]);
+  let best: { value: string; score: number } | undefined;
+  for (const option of bookingServices) {
+    if (option.value === "not-sure") continue;
+    const words = option.label.toLowerCase().split(/[^a-z0-9&-]+/).filter((w) => w.length > 3 && !stop.has(w));
+    const score = words.reduce((total, word) => (t.includes(word) ? total + 1 : total), 0);
+    if (score > 0 && (!best || score > best.score)) best = { value: option.value, score };
+  }
+  return best && best.score >= 1 ? best.value : undefined;
 }
 
 const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
@@ -184,7 +204,7 @@ const errorFor = (fields: Partial<BookingFields>, key: keyof BookingFields): str
 function ask(stage: FlowStage, extra = ""): string {
   switch (stage) {
     case "service":
-      return `Sure — I can start that for you. What are you after: a new rock well, a screen well, an artesian well, a salt & pepper well, pump work, or closing an old well? If you're not sure, say so and we'll figure it out together.${extra}`;
+      return `Sure — I can start that for you. ${serviceQuestion()}`;
     case "area":
       return `Which area of ${business.city}? A neighbourhood name or a five-digit postal code both work — that's how we confirm a technician can reach you same-day.`;
     case "date": {
@@ -200,7 +220,7 @@ function ask(stage: FlowStage, extra = ""): string {
     case "phone":
       return "And a phone number we can reach you on? Something like (904) 555-0142.";
     case "notes":
-      return "Anything else the crew should know — acreage, gate codes, an old well that's already on site? Say 'skip' if not.";
+      return "Anything the technician should know before arriving — which room, since when, gate or roof access? Say 'skip' if not.";
     case "consent":
       return "Last thing: I need your OK to store these details so the office can respond. That's it — no marketing list, no obligation. Do I have it?";
     case "confirm":

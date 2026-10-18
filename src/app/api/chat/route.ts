@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { buildMessages, offlineAnswer } from "@/lib/ai/brain";
 import { openingStep, stepFlow, wantsToBook, type FlowSession } from "@/lib/ai/booking-flow";
 import { fetchCompletion, readStream, resolveAttempts, type Attempt } from "@/lib/ai/providers";
-import { sanitizeAnswer } from "@/lib/ai/sanitize";
+import { createThinkScrubber, sanitizeAnswer } from "@/lib/ai/sanitize";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -310,11 +310,15 @@ export async function POST(request: NextRequest) {
             event({ type: "start", provider: attempt.label, model: attempt.model }),
           );
           let streamed = "";
+          const scrub = createThinkScrubber();
           try {
             await readStream(upstream.body as ReadableStream<Uint8Array>, {
               onDelta: (text) => {
-                streamed += text;
-                streamController.enqueue(event({ type: "delta", text }));
+                // drop the chain of thought before it reaches the browser
+                const visible = scrub.push(text);
+                if (!visible) return;
+                streamed += visible;
+                streamController.enqueue(event({ type: "delta", text: visible }));
               },
               onDone: () => {},
             });

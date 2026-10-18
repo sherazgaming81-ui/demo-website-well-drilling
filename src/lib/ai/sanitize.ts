@@ -10,8 +10,8 @@
 const PRICE =
   /(?:\bus\b\s*)?\$\s?\d[\d,]*(?:\.\d{1,2})?(?:\s*(?:to|through|-|\u2013|\u2014)\s*\$?\s?\d[\d,]*(?:\.\d{1,2})?)?|\b\d[\d,]*(?:\.\d{1,2})?\s*(?:usd|dollars?)\b|\b\d[\d,]*(?:\.\d{1,2})?\s*(?:\/\s?ft|per\s+(?:foot|lineal\s+foot|linear\s+foot)|a\s+foot|per\s+(?:month|year)|\/\s?mo(?:nth)?)\b/gi;
 
-const THINKING_BLOCK = /<(?:thinking|reasoning|thought)>[\s\S]*?(?:<\/(?:thinking|reasoning|thought)>|$)/gi;
-const THINKING_LABEL = /^[ \t]*(?:\[\s*(?:thinking|reasoning|plan|scratchpad)\s*\]|thinking\s*:|reasoning\s*:|my\s+thoughts\s*:)[ \t]*/im;
+const THINKING_BLOCK = /(?:<(?:think(?:ing)?|reasoning|thought|antml:thinking)\b[^>]*>|<\/(?:think(?:ing)?|reasoning|thought|antml:thinking)>)[\s\S]*?(?:<\/(?:think(?:ing)?|reasoning|thought|antml:thinking)>|[\n]{2}<|$)/gi;
+const THINKING_LABEL = /^[ \t]*(?:[\s*(?:thinking|reasoning|plan|scratchpad)\s*]|thinking\s*:|reasoning\s*:|my\s+thoughts\s*:)[ \t]*/im;
 const THINKING_NARRATION =
   /^[ \t]*(?:let\s+me\s+(?:think|see|break|walk)|i\s+(?:need|must)\s+to\s+(?:answer|respond|think|check)|first[,']?\s+i\s+(?:need|should|will)|the\s+user\s+(?:wants|is\s+asking|needs))[^\n]*\n?/im;
 
@@ -77,4 +77,88 @@ export function sanitizeAnswer(raw: string): Sanitized {
 
   const cleaned = scrubbed.text.trim() || SAFE_COST_LINE;
   return { text: cleaned, changed: cleaned !== raw.trim(), violations };
+}
+
+/* ── Streaming scrubber ──────────────────────────────────────────────────
+   The block pass above runs when the answer is finished, which would still let
+   a model's chain of thought flash on screen. This drops it before any token
+   reaches the browser. Tags are assembled rather than written literally so this
+   file never contains a real model tag for tooling and searches to trip over. */
+const OPEN_TOKEN = "<" + "think" + ">";
+const CLOSE_TOKEN = "<" + "/think>";
+const BLANK_LINE = "\n\n";
+const LINE_BREAK = "\n";
+
+export function createThinkScrubber() {
+  let hidden = false;
+  let carry = "";
+
+  return {
+    push(text: string): string {
+      let buffer = carry + text;
+      carry = "";
+      let visible = "";
+
+      for (;;) {
+        if (!buffer) return visible;
+
+        if (hidden) {
+          const end = buffer.indexOf(CLOSE_TOKEN);
+          if (end !== -1) {
+            hidden = false;
+            buffer = buffer.slice(end + CLOSE_TOKEN.length);
+            continue;
+          }
+          // Streamed chunks are arbitrary. The close tag arrives whole, broken
+          // across two frames, or alone on a line padded with newlines — that
+          // last case is what once leaked a bare close tag into a chat bubble, so:
+          // as the end of the hidden run, and fall back to a blank line for
+          // models that never close it.
+          for (let len = CLOSE_TOKEN.length; len > 1; len--) {
+            const tail = buffer.slice(-len);
+            if (CLOSE_TOKEN.startsWith(tail)) {
+              buffer = buffer.slice(0, buffer.length - len);
+              carry = tail;
+              break;
+            }
+          }
+          const lines = buffer.split(LINE_BREAK);
+          let resumed = false;
+          for (let i = 0; i < lines.length; i++) {
+            const trimmed = lines[i].trim();
+            if (!trimmed) continue;
+            if (trimmed === CLOSE_TOKEN || trimmed === CLOSE_TOKEN.slice(0, -1) || trimmed === CLOSE_TOKEN.slice(1)) {
+              buffer = lines.slice(i + 1).join(LINE_BREAK);
+              resumed = true;
+              break;
+            }
+          }
+          if (resumed) continue;
+          const gap = buffer.indexOf(BLANK_LINE);
+          if (gap !== -1) {
+            hidden = false;
+            buffer = buffer.slice(gap + BLANK_LINE.length);
+            continue;
+          }
+          return visible;
+        }
+
+        const start = buffer.indexOf(OPEN_TOKEN);
+        if (start === -1) {
+          for (let len = OPEN_TOKEN.length - 1; len > 1; len--) {
+            if (buffer.endsWith(OPEN_TOKEN.slice(0, len))) {
+              carry = buffer.slice(buffer.length - len);
+              buffer = buffer.slice(0, buffer.length - len);
+              break;
+            }
+          }
+          return visible + buffer;
+        }
+
+        visible += buffer.slice(0, start);
+        buffer = buffer.slice(start + OPEN_TOKEN.length);
+        hidden = true;
+      }
+    },
+  };
 }
