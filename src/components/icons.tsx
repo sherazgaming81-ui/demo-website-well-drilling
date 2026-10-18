@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { business } from "@/lib/site-data";
 import type { ReactNode } from "react";
 
@@ -40,15 +41,24 @@ export function Icon({ name, size = 20, className = "" }: { name: IconName; size
 }
 
 export function BrandMark({ className = "" }: { className?: string }) {
-  // One file, two jobs: this is the favicon (src/app/icon.svg) rendered in the page, so
-  // the tab icon and the brand mark can never drift apart. next/image refuses SVG
-  // without dangerouslyAllowSVG, and a 1.5 kB mark needs no optimiser.
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img className={`brand-mark${className ? ` ${className}` : ""}`} src="/icon.svg" alt="" width={64} height={64} draggable={false} />;
+  // Square mark only — used on narrow screens and inside dark panels, where the
+  // wide lockup cannot fit. Same artwork as the favicon, so the tab and the page
+  // agree by construction.
+  return <Image className={`brand-mark${className ? ` ${className}` : ""}`} src="/mark.webp" alt="" width={64} height={64} sizes="64px" priority draggable={false} />;
+}
+
+export function BrandLockup({ className = "" }: { className?: string }) {
+  // The full logo, generated with the wordmark, on a transparent plate.
+  return <Image className={`brand-logo${className ? ` ${className}` : ""}`} src="/logo.webp" alt={`${business.name} — ${business.city}`} width={1098} height={351} sizes="(max-width: 1180px) 210px, 250px" priority draggable={false} />;
 }
 
 export function Brand({ light = false }: { light?: boolean }) {
-  return <a href="#top" className={`brand ${light ? "brand-light" : ""}`} aria-label={`${business.shortName} home`}><BrandMark /><span className="brand-type"><span className="brand-word">freeze point</span><span className="brand-sub">AC CARE · KARACHI</span></span></a>;
+  return (
+    <a href="#top" className={`brand ${light ? "brand-light" : ""}`} aria-label={`${business.name} home`}>
+      <BrandLockup />
+      <span className="brand-fallback" aria-hidden="true"><BrandMark /><b>{business.shortName}</b></span>
+    </a>
+  );
 }
 
 export function Stars({ size = 13 }: { size?: number }) {

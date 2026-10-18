@@ -50,7 +50,9 @@ h2 { font-size: 44px; letter-spacing: -1.8px; font-weight: 600; line-height: 1.1
 /* A quiet, easy-to-use header. */
 .site-header { position: sticky; top: 0; z-index: 50; background: #f5f9fcf5; backdrop-filter: blur(16px); border-bottom: 1px solid #dbe8f0; }
 .header-inner { height: 92px; display: flex; align-items: center; gap: 32px; justify-content: space-between; }
-.brand { display: inline-flex; gap: 9px; align-items: center; flex-shrink: 0; }
+.brand { display: inline-flex; align-items: center; flex-shrink: 0; }
+.brand-logo { display: block; width: auto; height: 44px; max-width: 250px; object-fit: contain; }
+.brand-fallback { display: none; }
 .brand-mark { width: 33px; height: 33px; display: block; }
 .footer-brand .brand-mark { width: 30px; height: 30px; }
 .difference-signoff .brand-mark { width: 27px; height: 27px; }
@@ -403,6 +405,9 @@ h1 > span { display: block; white-space: nowrap; }
   .cta-panel h2 { font-size: 39px; }
   .footer-grid { gap: 26px; }
 }
+@media (max-width: 1180px) {
+  .brand-logo { height: 38px; max-width: 210px; }
+}
 @media (max-width: 1060px) {
   .header-phone { display: none; }
   .desktop-nav { margin-left: auto; margin-right: auto; }
@@ -521,6 +526,10 @@ h1 > span { display: block; white-space: nowrap; }
   .footer-column > .footer-phone { font-size: 13px; gap: 7px; }
 }
 @media (max-width: 760px) {
+  .brand-logo { display: none; }
+  .brand-fallback { display: inline-flex; align-items: center; gap: 8px; }
+  .brand-fallback .brand-mark { width: 30px; height: 30px; }
+  .brand-fallback b { font-family: "Freeze Display", "Freeze Body", sans-serif; font-size: 19px; font-weight: 750; letter-spacing: -.9px; }
   html { scroll-padding-top: 95px; }
   .container { width: calc(100% - 40px); }
   .header-inner { height: 76px; gap: 16px; }
@@ -1130,3 +1139,8 @@ h1 > span { display: block; white-space: nowrap; }
 .footer-phone.is-landline:hover { color: var(--blue); }
 .footer-column a svg { flex-shrink: 0; }
 .urdu-line { letter-spacing: 0; }
+
+/* the mark inside the navy panel and the footer reads better slightly larger and
+   without the header's lockup treatment */
+.footer-brand .brand-logo { height: 40px; max-width: 230px; }
+.difference-signoff .brand-mark { width: 30px; height: 30px; border-radius: 9px; }

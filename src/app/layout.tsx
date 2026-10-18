@@ -21,6 +21,7 @@ export const metadata: Metadata = {
     "ducted AC maintenance contract Karachi",
   ],
   alternates: { canonical: "/" },
+  manifest: "/site.webmanifest",
   openGraph: {
     type: "website",
     locale: "en_US",
