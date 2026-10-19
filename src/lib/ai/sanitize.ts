@@ -52,6 +52,9 @@ export function readsAsNarration(text: string): boolean {
   const first = text.trim();
   if (!META_OPEN.test(first)) return false;
   if (first.split(/\s+/).length > 90) return false;
+  // "I will answer your gas question on the visit" is a reply, not a plan — a sentence
+  // about the unit or the job is only self-talk when it says nothing about them.
+  if (ABOUT_THE_AC.test(first)) return false;
   return ABOUT_THE_ANSWER.test(first);
 }
 
@@ -64,7 +67,9 @@ const META_SENTENCE = /(?:\bi (?:should|need to|need|must|have to|am going to|wi
 function stripNarrationSentences(text: string): { text: string; hit: boolean } {
   const sentences = text.split(/(?<=[.!?])\s+/);
   if (sentences.length < 2) return { text, hit: false };
-  const kept = sentences.filter((sentence) => !META_SENTENCE.test(sentence));
+  // "I will check the capacitor before I answer you" matches the narration shape but is
+  // a real AC sentence — a sentence about the unit itself is always kept.
+  const kept = sentences.filter((sentence) => !(META_SENTENCE.test(sentence) && !ABOUT_THE_AC.test(sentence)));
   if (kept.length === sentences.length) return { text, hit: false };
   return { text: kept.join(" ").trim(), hit: true };
 }
@@ -141,10 +146,166 @@ function stripSelfTalk(text: string): { text: string; hit: boolean } {
   return { text: sentences.slice(index).join(" ").trim(), hit: true };
 }
 
+/* The one decision the model keeps narrating in Hinglish is whether to attach the
+   invisible [[BOOK]] / [[SERVICE:x]] marks: "Nahi, sirf book token… Haan, emit karna
+   hai… Lekin service emit nahi karna… Final: <repeats the answer>". A customer reply
+   about an air conditioner never discusses tokens or emitting, so any sentence that
+   does is the model talking to itself and comes out whole. */
+const MARK_TALK = /\b(?:token|tokens|emit|emits|emitted|emitting|sentinel|sentinels)\b/i;
+/* A sentence about how the reply itself is written ("The reply is short and direct.",
+   "keep it polite") is narration in any language — a customer sentence about an AC never
+   describes its own brevity. The dash-trail is the same animal wearing a moustache:
+   "👍 — wait, no emoji." followed by a verbatim re-do of the whole answer. */
+const SELF_DESCRIBE = /\b(?:reply|answer|response|message)\b[^.!?)]{0,44}\b(?:is|will be|should be|must be|needs? to be|stays?|was|had to be)\b[^.!?)]{0,44}\b(?:short|brief|concise|direct|polite|warm|clear|simple|friendly|professional|under \d+|Hinglish|English|one greeting|two|three)\b|\b(?:keep|make|write|start|end)\b[^.!?)]{0,30}\b(?:it|this|the reply|the answer)\b[^.!?)]{0,30}\b(?:short|brief|direct|concise|polite|warm|under \d+|professional|Hinglish|simple)\b/i;
+const DASH_TRAIL = /\s*[—–]\s*(?:wait\b|no\b|actually\b|oh\b|hold on\b|scratch|oops\b|the reply\b|the answer\b|i (?:should|need to|must|will|’ll|'ll)\b|let me\b(?!\s+know))[^—–!?]*/gi;
+/* An answer the model re-types after its own correction: same words, maybe a different
+   emoji. First copy wins, verbatim repeats go. Sentences need ≥4 words to dedupe so a
+   short honest echo ("Bilkul. Bilkul.") is never touched. */
+const NORM_EMOJI = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}]/gu;
+function normKey(sentence: string): string {
+  return sentence
+    .replace(NORM_EMOJI, "")
+    .toLowerCase()
+    .replace(/\[\[[^\]]+\]\]/g, "")
+    .replace(/[^a-z\u0600-\u06FF0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+function collapseRepeats(text: string): { text: string; hit: boolean } {
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  if (sentences.length < 2) return { text, hit: false };
+  const seen = new Set<string>();
+  const kept = sentences.filter((sentence) => {
+    const key = normKey(sentence);
+    if (key.split(" ").length < 4 || key.length < 14) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (kept.length === sentences.length) return { text, hit: false };
+  return { text: kept.join(" ").replace(/\s+/g, " ").trim(), hit: true };
+}
+/* The [[..]] marks the widget reads must survive even when the sentence they were glued
+   to is deleted, or the CTA highlight silently dies with the narration. */
+const MARKS = /\[\[(?:BOOK|SERVICE:[a-z0-9-]+)\]\]/gi;
+function keepMarks(sentence: string, sinks: string[]): string {
+  for (const mark of sentence.match(MARKS) ?? []) sinks.push(mark);
+  return sentence.replace(MARKS, " ");
+}
+function restoreMarks(text: string, marks: string[]): string {
+  const missing = marks.filter((mark) => !text.includes(mark));
+  return missing.length ? `${text} ${missing.join(" ")}`.trim() : text;
+}
+/* An interjection of self-decision that survives only next to a removed line, and only
+   when it is too short to carry information: "Bas number diya." — five words, all plan. */
+const SELF_DECISION_ECHO = /^(?:\*+\s*)?(?:bas|nahi|nahin|haan|han|theek|thik|ok|okay|wait|ab)\b/i;
+
+function dropMarkTalk(text: string): { text: string; hit: boolean } {
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  if (sentences.length < 2) return { text, hit: false };
+  const sinks: string[] = [];
+  const bare = sentences.map((sentence) => {
+    // judge the sentence without its leading "👍 [[BOOK]]" garnish: the mark rides along
+    // with whatever sentence ends first, it is not part of the wording
+    const stripped = sentence.replace(/^[\s.,:;!?()\-]*(?:(?:\[\[[^\]]+\]\]|[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}])[\s.,:;!?()\-]*)*/u, "");
+    return normKey(stripped) || normKey(sentence);
+  });
+  const removed = sentences.map((sentence, i) => MARK_TALK.test(sentence) || SELF_DESCRIBE.test(bare[i]));
+  // a bare "👍 ?" left between the real answer and the model's muttering is punctuation debris —
+  // but the emoji riding with it is the reply's own closer, so it is kept and re-attached
+  const tail: string[] = [];
+  for (let i = 0; i < sentences.length; i++) {
+    if (removed[i] || bare[i]) continue;
+    const without = sentences[i].replace(MARKS, " ").replace(/\s+/g, " ").trim();
+    // debris is what is left when the marks are out: no letter and no digit anywhere,
+    // only emoji and punctuation. Length alone misjudged surrogate pairs and double spaces.
+    if (/[\p{L}\p{N}]/u.test(without)) continue;
+    removed[i] = true;
+    for (const mark of sentences[i].match(MARKS) ?? []) sinks.push(mark);
+    tail.push(...(without.match(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/gu) ?? []));
+  }
+  for (let round = 0; round < 2; round++) {
+    for (let i = 0; i < sentences.length; i++) {
+      if (removed[i]) continue;
+      const neighbour = (i > 0 && removed[i - 1]) || (i < sentences.length - 1 && removed[i + 1]);
+      if (!neighbour) continue;
+      const words = bare[i].split(" ");
+      // talking to itself, not to the customer: a sentence that says "aap" is an answer
+      if (words.length <= 6 && SELF_DECISION_ECHO.test(bare[i]) && !/\baap\b|\bapko\b|\bapk?\b/i.test(bare[i])) removed[i] = true;
+    }
+  }
+  if (!removed.some(Boolean)) return { text, hit: false };
+  const kept = `${sentences
+    .map((sentence, i) => (removed[i] ? keepMarks(sentence, sinks) : sentence))
+    .filter((_, i) => !removed[i])
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim()}${tail.length ? ` ${tail.join("")}` : ""}`;
+  return { text: restoreMarks(kept, sinks), hit: true };
+}
+
+/* Some replies deliberate first and then print the real answer after a label —
+   "Final: "…"". Everything the label introduces, and nothing before it, is what the
+   customer should read. Only trusted when the head actually contains model-talk or the
+   tail is wrapped in quotes, so a genuine sentence like "Final report: kal milegi" is
+   never cut. */
+const FINAL_LABEL = /\bfinal(?:\s+(?:answer|reply|message|version))?\s*:\s*["'\u201C\u201D\u2018\u2019]?\s*/gi;
+function takeFinalAnswer(text: string): { text: string; hit: boolean } {
+  let match: RegExpExecArray | null = null;
+  for (const found of text.matchAll(FINAL_LABEL)) match = found;
+  if (!match || match.index === 0) return { text, hit: false };
+  const head = text.slice(0, match.index);
+  let tail = text.slice(match.index + match[0].length).trim();
+  const quoted = /^["'\u201C\u2018][\s\S]*["'\u201D\u2019]$/.test(tail);
+  if (!quoted && !MARK_TALK.test(head) && !/\bdraft|plan\b/i.test(head)) return { text, hit: false };
+  tail = tail.replace(/^["'\u201C\u2018]\s*/, "").replace(/\s*["'\u201D\u2019]+$/, "").trim();
+  if (tail.split(/\s+/).length < 3) return { text, hit: false };
+  return { text: tail, hit: true };
+}
+
+/* The shapes the gateway keeps producing all end with the model addressing itself:
+   "…[[BOOK]] nahi, bas number chahiye tha", "Wait, I need to just give the number",
+   "The customer asked… I gave…", "No need for…", "The reply is clean." The vocabulary
+   is unbounded — every day it is a new wording — so the rule is structural: the real
+   answer is always the first thing it wrote, and everything from the first cue of
+   self-address onward is the workshop floor talking. Cut at the cue, keep the marks and
+   the closing emoji that were glued to it. A cue at the very start of a reply is not a
+   cut (nothing real would be lost before it); the other passes judge that. */
+const DELIBERATION =
+  /\b(?:chahiye tha|karna tha|poochna tha|likhna tha|dekhna tha|kar raha tha|bas number diya)\b|\b(?:wait|hold on|oops)[,.]|\bi (?:gave|said|wrote|listed|sent|decided)\b|\bi (?:should|must|need to|’ll|'ll|will)\b[^.!?]{0,30}\b(?:just|only|not\b|skip|omit|add|include|emit|give|send|keep it|start|open)\b|\bthe (?:customer|user|visitor) (?:asked|wanted|is asking|needs|said|mentioned)\b|\bthat'?s it\b|\bno need for\b|\b(?:reply|answer|message)\b[^.!?]{0,24}\bis\b[^.!?]{0,24}\b(?:clean|short|direct|complete|done|fine|perfect|brief|ready)\b|\bit (?:is|'?s) better\b[^.!?]{0,24}\bto (?:ask|add|include|start|open)\b/i;
+function truncateAtDeliberation(text: string): { text: string; hit: boolean } {
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  if (sentences.length < 2) return { text, hit: false };
+  const cue = sentences.findIndex((sentence, i) => i > 0 && DELIBERATION.test(normKey(sentence.replace(MARKS, " "))));
+  if (cue < 1) return { text, hit: false };
+  const sinks: string[] = [];
+  const kept = sentences.slice(0, cue);
+  // the cue sentence's own garnish — a closing emoji and any marks — belongs to the answer
+  const garnish = sentences[cue].slice(0, sentences[cue].length - sentences[cue].replace(/^[\s.,:;!?()\-]*(?:(?:\[\[[^\]]+\]\]|[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}])[\s.,:;!?()\-]*)*/u, "").length);
+  const closer = garnish.match(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/gu);
+  if (closer) kept.push(closer.join(""));
+  for (const chunk of sentences.slice(cue)) for (const mark of chunk.match(MARKS) ?? []) sinks.push(mark);
+  const joined = `${kept.join(" ").replace(/\s+/g, " ").trim()}${sinks.length ? " " : ""}${[...new Set(sinks)].join(" ")}`.trim();
+  return { text: joined, hit: true };
+}
+
 function stripPlanNarration(raw: string): { text: string; hit: boolean } {
   let text = raw;
+  // cut the reply at the first sentence where the model turns to address itself
+  const cut = truncateAtDeliberation(text);
+  if (cut.hit) text = cut.text;
+  // "— wait, no emoji." trails are self-corrections, not prose: cut the trail first so
+  // the re-typed answer behind it can be collapsed as a repeat below
+  const trailed = text.replace(DASH_TRAIL, " ");
+  if (trailed.trim() !== text.trim()) text = trailed;
+  // a reply that repeats itself after "Final:" — keep only the answer the label introduces
+  const finalPass = takeFinalAnswer(text);
+  if (finalPass.hit) text = finalPass.text;
   const selfTalk = stripSelfTalk(text);
   if (selfTalk.hit) text = selfTalk.text;
+  // sentences about attaching the invisible marks are never for the customer
+  const markTalk = dropMarkTalk(text);
+  if (markTalk.hit) text = markTalk.text;
   const aside = stripMetaAsides(text);
   if (aside.hit) text = aside.text;
   if (PLAN_AS_REPLY.test(text.trim()) || readsAsNarration(text)) return { text: "", hit: true };
@@ -162,14 +323,17 @@ function stripPlanNarration(raw: string): { text: string; hit: boolean } {
     if (!numbered && !PLAN_LEAD.test(line) && !PLAN_HEADER.test(line)) break;
     index++;
   }
-  const kept = lines.slice(index).join("\n").trim();
-  return { text: kept, hit: (index > 0 || selfTalk.hit || aside.hit || stutter.hit) && kept !== raw.trim() };
+  const repeat = collapseRepeats(lines.slice(index).join("\n").trim());
+  const kept = repeat.text;
+  const stripped = index > 0 || cut.hit || selfTalk.hit || markTalk.hit || aside.hit || stutter.hit || finalPass.hit || repeat.hit || trailed !== raw;
+  return { text: kept, hit: stripped && kept !== raw.trim() };
 }
 
 
 /** Plain text is all the bubble can render, so markdown is flattened, not parsed. */
 function flatten(text: string): string {
   return text
+    .replace(/<\s*\/?br\s*\/?\s*>/gi, "\n") // </br> sent as literal text renders literally
     .replace(/\*\*([\s\S]+?)\*\*/g, "$1")
     .replace(/\*([^*\n]+)\*/g, "$1")
     .replace(/__([^_\n]+)__/g, "$1")
@@ -205,6 +369,28 @@ function scrubPrices(text: string): { text: string; hit: boolean } {
   return { text: outLines.join(" ").replace(/\s+/g, " ").trim(), hit };
 }
 
+/* A model that panics about the marks stamps them on every line — [[BOOK]] plus all six
+   SERVICE ids in a row. The widget keeps the LAST mark it sees, so the flood can pick a
+   service the customer never mentioned. First mark of each kind wins; later copies are
+   dropped. */
+function dedupeMarks(text: string): { text: string; hit: boolean } {
+  let hit = false;
+  const seen = new Set<string>();
+  const out = text
+    .replace(MARKS, (mark) => {
+      const kind = /^\[\[BOOK\]\]$/i.test(mark) ? "BOOK" : "SERVICE";
+      if (seen.has(kind)) {
+        hit = true;
+        return "";
+      }
+      seen.add(kind);
+      return mark;
+    })
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n");
+  return { text: out.trim(), hit };
+}
+
 export function sanitizeAnswer(raw: string): Sanitized {
   const violations: string[] = [];
   let text = raw;
@@ -232,9 +418,12 @@ export function sanitizeAnswer(raw: string): Sanitized {
   const scrubbed = scrubPrices(flatten(spoken.text));
   if (scrubbed.hit) violations.push("price figure removed");
 
+  const marks = dedupeMarks(scrubbed.text);
+  if (marks.hit) violations.push("duplicate marks dropped");
+
   // a deleted price leaves a hole that needs the standard cost sentence; a reply that
   // was nothing but narration leaves nothing to answer with, and the caller says so
-  const cleaned = scrubbed.text.trim() || (scrubbed.hit ? SAFE_COST_LINE : "");
+  const cleaned = marks.text || (scrubbed.hit ? SAFE_COST_LINE : "");
   return { text: cleaned, changed: cleaned !== raw.trim(), violations };
 }
 

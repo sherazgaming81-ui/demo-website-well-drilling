@@ -234,6 +234,11 @@ try {
   await page.getByRole("button", { name: "Send your question" }).click();
   await page.getByRole("button", { name: "Close chat" }).click();
   await page.waitForFunction(() => /^\(\d+\) Freeze Point/.test(document.title), null, { timeout: 120000 });
+  // the badge swap is async after the title change (it waits on image.decode), so the
+  // href gets waited for too — reading it in the same tick is a race, not a product bug
+  await page
+    .waitForFunction(() => /^data:image\/png/.test(document.querySelector('link[rel~="icon"]')?.getAttribute("href") ?? ""), null, { timeout: 15000 })
+    .catch(() => {});
   const badge = await page.evaluate(() => ({
     title: document.title,
     unread: document.querySelector(".chat-launcher")?.getAttribute("data-unread") ?? null,
@@ -355,9 +360,13 @@ try {
       metaAside: /\((?:If you prefer|Note:|Let me|Since |Given )/i.test(last),
       selfTalk: /^\s*(?:\*\*)?i (?:should|need to|need|must|will|am going to)\b[^.\n]{0,90}\b(?:hinglish|short|under \d+ words|professional|warm|tone|answer|respond|reply|keep it)\b/i.test(last),
       sentinel: /\[\[|\]\]/.test(last),
+      // the Hinglish shape of the same bug: the model weighing whether to attach its
+      // invisible marks, out loud ("book token emit karna hai…", then "Final: …")
+      markTalk: bubbles.some((b) => /\b(?:book|service) token|token emit|emit karna|emit nahi|\bfinal\s*:/i.test(b)),
       last: last.slice(0, 80),
     };
   });
+  assert.equal(shape.markTalk, false, "a reply deliberated about the invisible marks in front of a visitor");
   assert.ok(shape.count >= 1, "no assistant answer was rendered, so its shape could not be checked");
   assert.equal(shape.startsWithParen, false, `an answer opened with a bracketed aside: ${shape.last}`);
   assert.equal(shape.metaAside, false, `an answer contains a note about its own wording: ${shape.last}`);
@@ -465,6 +474,29 @@ try {
     );
     assert.ok(note.length > 20, `the chat went silent instead of failing honestly: ${JSON.stringify(asked)}`);
     ok(`Answer style: SKIPPED (model saturated this run) — the failure was honest, not invented: "${note.slice(0, 56)}…"`);
+  }
+
+  /* The bug as the owner saw it (2026-10-19): asked for the WhatsApp number, the bubble
+     carried the model's mark deliberation and then repeated the answer after "Final:".
+     Ask the same question; the bubble must show the number once and read like prose. */
+  const WHATS_Q = "WhatsApp number kya hai? Number do.";
+  let whats = await askAnew(WHATS_Q);
+  if (!whats.settled || whats.errored || whats.text.length < 12 || honestFailure.test(whats.text)) {
+    await page.waitForTimeout(3000);
+    whats = await askAnew(WHATS_Q);
+  }
+  if (whats.settled && whats.text.length > 12 && !whats.errored && !honestFailure.test(whats.text)) {
+    const numberSeen = (whats.text.match(/03\d{2}[ -]?\d{3}[ -]?\d{4}/g) || []).length;
+    assert.ok(numberSeen >= 1, `a WhatsApp question got no number back: ${whats.text.slice(0, 140)}`);
+    assert.equal(numberSeen, 1, `the number appears ${numberSeen} times — an answer the model echoed after its own notes: ${whats.text.slice(0, 160)}`);
+    assert.equal(
+      /token|emit|\bfinal\s*:|karna tha|sentinel/i.test(whats.text),
+      false,
+      `the reply deliberated about its own marks in front of a visitor: ${whats.text.slice(0, 160)}`,
+    );
+    ok("WhatsApp-number reply reads clean: number once, no mark-talk, no Final: echo");
+  } else {
+    ok("WhatsApp-number shape: SKIPPED (model saturated this run)");
   }
 
   // an eaten leading character shows up as a lowercase or clipped start; model
@@ -1125,7 +1157,11 @@ try {
   assert.equal(missing.length, 0, `sitemap is missing ${missing.join(", ")}`);
   ok(`Unknown area 404s, and all 7 area URLs are in sitemap.xml`);
 
-  assert.deepEqual(failedRequests, [], `failed network requests: ${failedRequests.join(", ")}`);
+  // A 503 on /api/chat is the designed outage path (gateway at capacity → honest
+  // failure line), exercised on purpose by the saturation-tolerant chat steps above.
+  // Everything else on the page still has to be silent.
+  const notable = failedRequests.filter((line) => !/^503 \S*\/api\/chat$/.test(line));
+  assert.deepEqual(notable, [], `failed network requests: ${notable.join(", ")}`);
   assert.deepEqual(errors, [], `client errors: ${errors.join(", ")}`);
   ok("Zero failed requests and zero client errors");
   console.log(`\n${results.length} smoke checks passed.`);
