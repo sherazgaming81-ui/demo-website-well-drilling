@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "check:deploy": "node scripts/deploy-check.mjs"
+    "check:deploy": "node scripts/deploy-check.mjs",
+    "check:sanitize": "node scripts/sanitize-check.mjs"
   },
   "dependencies": {
     "next": "^16.3.5",
