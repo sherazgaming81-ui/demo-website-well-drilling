@@ -25,7 +25,6 @@ export type FlowSession = {
 export type FlowStep = {
   session: FlowSession;
   reply: string;
-  chips: string[];
   progress: { stage: FlowStage | "done"; label: string } | null;
   booked?: { reference: string };
 };
@@ -45,8 +44,6 @@ const LABEL: Record<FlowStage, string> = {
   confirm: "your confirmation",
   done: "done",
 };
-
-const HOUR_OPTIONS = ["Morning · 9 am–1 pm", "Evening · 4–9 pm", "Any time works"];
 
 /** Cheap intent check so free chat can offer to start booking. */
 export function wantsToBook(text: string): boolean {
@@ -212,13 +209,13 @@ function ask(stage: FlowStage, extra = ""): string {
       return `Got it. What date suits you? We can look at anything from tomorrow through ${formatDate(max)} — "tomorrow", "next Friday" or "Sep 20" all work.`;
     }
     case "time":
-      return "And when is best to connect — morning, afternoon, or are you flexible?";
+      return "And when suits — morning (9 am–1 pm), evening (4–9 pm), or flexible either way?";
     case "name":
       return "Thanks. What name should the office ask for when they call?";
     case "email":
-      return "Your email address, please — that's where we'll send the written estimate.";
+      return "Your email address, please — that's where the written quote goes once the technician has read the unit.";
     case "phone":
-      return "And a phone number we can reach you on? Something like (904) 555-0142.";
+      return `And a phone number we can reach you on — the way we write it here is ${business.phoneDisplay}.`;
     case "notes":
       return "Anything the technician should know before arriving — which room, since when, gate or roof access? Say 'skip' if not.";
     case "consent":
@@ -246,48 +243,29 @@ export function summary(session: FlowSession): string {
   return `Here's what I've got:\n\n${lines.join("\n")}\n\nReply **yes** and I'll send it to the office right now. Or tell me what to change — say "change email" — or "cancel".`;
 }
 
-function chipsFor(stage: FlowStage, session: FlowSession): string[] {
-  switch (stage) {
-    case "service":
-      return bookingServices.map((option) => option.label);
-    case "date":
-      return ["Tomorrow", "Next week", "Next Monday"];
-    case "time":
-      return HOUR_OPTIONS;
-    case "notes":
-      return ["Skip"];
-    case "consent":
-      return ["Yes, go ahead", "No"];
-    case "confirm":
-      return ["Yes, send it", "Change email", "Change date", "Cancel"];
-    default:
-      return [];
-  }
-}
-
 const reask = (session: FlowSession, message: string): FlowStep => ({
   session,
   reply: message,
-  chips: chipsFor(session.stage, session),
   progress: progressOf(session),
 });
 
 /** The flow's opening turn: used when a visitor asks to book, or taps the CTA. */
 export function openingStep(seed?: string | null): FlowStep {
   const session = startFlow(seed);
-  return { session, reply: ask(session.stage), chips: chipsFor(session.stage, session), progress: progressOf(session) };
+  return { session, reply: ask(session.stage), progress: progressOf(session) };
 }
 
 /**
- * Feed one visitor message into the flow. Returns the reply to show, the chips to
- * offer, and (once booked) the reference.
+ * Feed one visitor message into the flow. Returns the reply to show and, once booked,
+ * the reference. Nothing is offered as a button any more — the flow says what it needs
+ * in words and the visitor answers in words.
  */
 export async function stepFlow(previous: FlowSession, text: string): Promise<FlowStep> {
   const session: FlowSession = { ...previous, fields: { ...previous.fields }, updatedAt: Date.now() };
   const raw = text.trim();
 
   if (isCancel(raw)) {
-    return { ...session, session: { ...session, stage: "done" }, reply: `No problem — I've dropped it. Nothing was saved. If you change your mind, the office is on ${business.phoneDisplay}, ${business.hours.map((h) => `${h.days} ${h.time}`).join(", ")}.`, chips: ["Start over"], progress: null };
+    return { ...session, session: { ...session, stage: "done" }, reply: `No problem — I've dropped it. Nothing was saved. If you change your mind, the office is on ${business.phoneDisplay}, ${business.hours.map((h) => `${h.days} ${h.time}`).join(", ")}.`, progress: null };
   }
 
   if (session.stage === "confirm") {
@@ -295,14 +273,14 @@ export async function stepFlow(previous: FlowSession, text: string): Promise<Flo
     if (change) {
       const map: Record<string, FlowStage> = { service: "service", area: "area", date: "date", time: "time", name: "name", email: "email", phone: "phone", notes: "notes" };
       session.stage = map[change];
-      return { session, reply: ask(session.stage), chips: chipsFor(session.stage, session), progress: progressOf(session) };
+      return { session, reply: ask(session.stage), progress: progressOf(session) };
     }
     const yes = parseConsent(raw);
     if (yes === null) {
       return reask(session, "Just say yes and I'll send it, tell me what to change, or say cancel.");
     }
     if (yes === false) {
-      return { session: { ...session, stage: "done" }, reply: `Alright, I've left it with you — nothing was sent. You can also call ${business.phoneDisplay} and they'll take it from there.`, chips: ["Start over"], progress: null };
+      return { session: { ...session, stage: "done" }, reply: `Alright, I've left it with you — nothing was sent. You can also call ${business.phoneDisplay} and they'll take it from there.`, progress: null };
     }
     session.requestId ??= newRequestId();
     const result = await createBooking({ ...session.fields, consent: true, website: "", requestId: session.requestId } as BookingFields);
@@ -313,7 +291,7 @@ export async function stepFlow(previous: FlowSession, text: string): Promise<Flo
       const next = firstKey && stageForField[firstKey] ? stageForField[firstKey]! : "confirm";
       session.stage = next;
       const detail = firstKey && result.errors?.[firstKey] ? ` ${result.errors[firstKey]}` : ` ${result.error}`;
-      return { session, reply: `I couldn't send that yet.${detail}`, chips: chipsFor(next, session), progress: progressOf(session) };
+      return { session, reply: `I couldn't send that yet.${detail}`, progress: progressOf(session) };
     }
     session.stage = "done";
     session.reference = result.reference;
@@ -322,7 +300,7 @@ export async function stepFlow(previous: FlowSession, text: string): Promise<Flo
       reply: result.created
         ? `Done — that's with the office now. Your reference is **${result.reference}**. Quote it if you call ${business.phoneDisplay}. Someone will phone you to agree a time; a request here isn't a confirmed booking, and no work starts until you approve a written estimate.`
         : `That one had already come through — same reference: **${result.reference}**. No duplicate was sent.`,
-      chips: [],
+
       progress: progressOf(session),
       booked: { reference: result.reference },
     };
@@ -395,20 +373,20 @@ export async function stepFlow(previous: FlowSession, text: string): Promise<Flo
       const yes = parseConsent(raw);
       if (yes === null) return reask(session, "A simple yes or no is all I need here.");
       if (yes === false) {
-        return { session: { ...session, stage: "done" }, reply: `That's fine — nothing is saved without your OK. If you'd rather do this by phone, we're on ${business.phoneDisplay}, ${business.hours.map((h) => `${h.days} ${h.time}`).join(", ")}.`, chips: ["Start over"], progress: null };
+        return { session: { ...session, stage: "done" }, reply: `That's fine — nothing is saved without your OK. If you'd rather do this by phone, we're on ${business.phoneDisplay}, ${business.hours.map((h) => `${h.days} ${h.time}`).join(", ")}.`, progress: null };
       }
       session.fields.consent = true;
       session.stage = "confirm";
-      return { session, reply: summary(session), chips: chipsFor("confirm", session), progress: progressOf(session) };
+      return { session, reply: summary(session), progress: progressOf(session) };
     }
     default:
-      return { session, reply: ask("service"), chips: chipsFor("service", session), progress: progressOf(session) };
+      return { session, reply: ask("service"), progress: progressOf(session) };
   }
 }
 
 function next(session: FlowSession, prefix = ""): FlowStep {
   const reply = prefix ? `${prefix}\n\n${ask(session.stage)}` : ask(session.stage);
-  return { session, reply, chips: chipsFor(session.stage, session), progress: progressOf(session) };
+  return { session, reply, progress: progressOf(session) };
 }
 
 /** Keeps the free-chat brain honest about what the flow can and cannot promise. */

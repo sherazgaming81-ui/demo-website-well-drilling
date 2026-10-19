@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
-import { buildMessages, offlineAnswer } from "@/lib/ai/brain";
+import { business } from "@/lib/site-data";
+import { buildMessages } from "@/lib/ai/brain";
 import { openingStep, stepFlow, wantsToBook, type FlowSession } from "@/lib/ai/booking-flow";
 import { fetchCompletion, readStream, resolveAttempts, type Attempt } from "@/lib/ai/providers";
 import { createThinkScrubber, sanitizeAnswer } from "@/lib/ai/sanitize";
@@ -10,13 +11,13 @@ export const dynamic = "force-dynamic";
 /**
  * POST { messages: [{role, content}, ...] }  → text/event-stream
  *
- *   data: {"type":"start","provider":"Groq","model":"llama-3.3-70b-versatile"}
- *   data: {"type":"delta","text":"Most residential wells..."}
- *   data: {"type":"done","fallback":false}
+ *   data: {"type":"start","provider":"Dahl Inference","model":"deepseek-ai/…"}
+ *   data: {"type":"delta","text":"…"}
+ *   data: {"type":"done"}
  *
- * Any failure that is not the visitor's fault (provider down, rate limit, bad
- * key) moves to the next provider; if the whole chain fails, the offline
- * knowledge base answers instead.
+ * Each model in the chain is tried in order. If the whole chain fails — or no key is
+ * configured — this returns a clear 503 with a plain sentence and the number to call,
+ * never an invented answer: the assistant only ever says what a model actually said.
  */
 
 type IncomingMessage = { role: "user" | "assistant"; content: string };
@@ -25,9 +26,9 @@ const MAX_MESSAGES = 20;
 const MAX_CHARS = 1500;
 const MAX_TOTAL_CHARS = 12_000;
 const ATTEMPT_TIMEOUT_MS = 12_000;
-// One visitor should never be left staring at "typing" while we work out that every
-// provider is rate-limited or out of quota — after this budget the offline knowledge
-// base answers instead. 8 attempts × 12s would otherwise be minutes.
+// A visitor must not be left staring at "typing" while we discover that every model
+// is rate-limited or out of quota — past this budget the chain stops and says so.
+// 8 attempts × 12s would otherwise be minutes of nothing.
 const CHAIN_BUDGET_MS = 18_000;
 
 /* ----------------------------- rate limiting ----------------------------- */
@@ -76,7 +77,7 @@ function saveFlow(key: string | null, session: FlowSession | undefined) {
 }
 
 /** One flow turn, delivered as the same SSE shape the widget already speaks. */
-function flowStream(step: { session: FlowSession; reply: string; chips: string[]; progress: { stage: string; label: string } | null; booked?: { reference: string } }, key: string | null): Response {
+function flowStream(step: { session: FlowSession; reply: string; progress: { stage: string; label: string } | null; booked?: { reference: string } }, key: string | null): Response {
   saveFlow(key, step.session);
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -84,15 +85,7 @@ function flowStream(step: { session: FlowSession; reply: string; chips: string[]
       for (let index = 0; index < step.reply.length; index += 90) {
         controller.enqueue(event({ type: "delta", text: step.reply.slice(index, index + 90) }));
       }
-      controller.enqueue(
-        event({
-          type: "booking",
-          stage: step.session.stage,
-          progress: step.progress,
-          chips: step.chips,
-          ...(step.booked ? { booked: step.booked } : {}),
-        }),
-      );
+      controller.enqueue(event({ type: "booking", stage: step.session.stage, progress: step.progress, ...(step.booked ? { booked: step.booked } : {}) }));
       controller.enqueue(event({ type: "done", fallback: false }));
       controller.close();
     },
@@ -175,25 +168,6 @@ function parseMessages(body: unknown): IncomingMessage[] | null {
   return cleaned;
 }
 
-/** Answer straight from the offline knowledge base, streamed like a provider. */
-function offlineStream(history: IncomingMessage[]): Response {
-  const answer = offlineAnswer(history);
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      controller.enqueue(event({ type: "start", provider: "offline", model: "knowledge-base" }));
-      // Deliver in small pieces so the widget renders it like a live answer.
-      const words = answer.split(" ");
-      for (let index = 0; index < words.length; index += 3) {
-        controller.enqueue(event({ type: "delta", text: words.slice(index, index + 3).join(" ") + " " }));
-        await new Promise((resolve) => setTimeout(resolve, 45));
-      }
-      controller.enqueue(event({ type: "done", fallback: true }));
-      controller.close();
-    },
-  });
-  return new Response(stream, { headers: streamHeaders("offline", "knowledge-base") });
-}
-
 function streamHeaders(provider: string, model: string): Record<string, string> {
   return {
     "Content-Type": "text/event-stream; charset=utf-8",
@@ -217,7 +191,7 @@ export async function GET() {
       ok: true,
       providers: [...new Set(attempts.map((attempt) => attempt.provider))],
       models: attempts.map((attempt) => `${attempt.provider}/${attempt.model}`),
-      mode: attempts.length ? "live" : "offline knowledge base",
+      mode: attempts.length ? "live" : "unavailable",
     },
     { headers: { "Cache-Control": "no-store" } },
   );
@@ -234,7 +208,7 @@ export async function POST(request: NextRequest) {
   const ip = (request.headers.get("x-forwarded-for") ?? "").split(",")[0]?.trim() || "local";
   if (rateLimited(ip)) {
     return Response.json(
-      { error: "You've sent quite a few messages. Please call (904) 477-9809 or try again in a few minutes." },
+      { error: `You have sent quite a few messages. Give it ten minutes, or call ${business.phoneDisplay} and the office will take it from there.` },
       { status: 429, headers: { "Cache-Control": "no-store" } },
     );
   }
@@ -279,7 +253,7 @@ export async function POST(request: NextRequest) {
 
   const attempts = resolveAttempts();
   if (attempts.length === 0) {
-    return offlineStream(history);
+    return unavailable();
   }
 
   const messages = buildMessages(history);
@@ -361,5 +335,19 @@ export async function POST(request: NextRequest) {
   }
 
   console.error("[chat] every provider failed:\n" + failures.join("\n"));
-  return offlineStream(history);
+  return unavailable();
+}
+
+/**
+ * The honest failure. No scripted answer is served in its place — the visitor is told
+ * plainly, given the number, and left one tap away from the form, so an outage is an
+ * outage and not a bot pretending to know things.
+ */
+function unavailable(): Response {
+  return Response.json(
+    {
+      error: `The assistant can't reach the workshop's answer service right now, so I would rather say that than guess. Call ${business.phoneDisplay} — the office takes the same details — or use the inspection request on this page and we will pick it up from there.`,
+    },
+    { status: 503, headers: { "Cache-Control": "no-store" } },
+  );
 }

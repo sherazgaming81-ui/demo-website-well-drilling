@@ -139,15 +139,59 @@ try {
   assert.equal(back, narrow, `Shrink window did not give the default width back (${back} vs ${narrow})`);
   ok(`Option menu works: Expand widens the panel ${narrow}px → ${wide}px (transcript + new chat wired to real actions)`);
 
+  // The picker: searchable, grouped, and every button must actually carry a glyph —
+  // a blank cell (which is what an emoji lost to file encoding looks like) is a dead button.
   await page.getByRole("button", { name: "Add an emoji" }).click();
-  const picked = await page.evaluate(() => document.querySelectorAll(".chat-emoji button").length);
-  assert.ok(picked >= 8, `emoji picker showed ${picked} entries`);
-  await page.locator(".chat-emoji button").first().click();
+  const picker = await page.evaluate(() => {
+    const box = document.querySelector(".chat-emoji");
+    if (!box) return null;
+    const buttons = [...box.querySelectorAll(".chat-emoji-grid button")];
+    return {
+      search: Boolean(box.querySelector(".chat-emoji-search")),
+      groups: [...box.querySelectorAll(".chat-emoji-group")].map((h) => h.innerText.trim()),
+      count: buttons.length,
+      blank: buttons.filter((b) => b.textContent.trim().length === 0).length,
+      titles: buttons.filter((b) => !b.getAttribute("title") || !b.getAttribute("aria-label")).length,
+      stack: getComputedStyle(buttons[0]).fontFamily,
+      scrolls: box.querySelector(".chat-emoji-scroll").scrollHeight > box.querySelector(".chat-emoji-scroll").clientHeight,
+    };
+  });
+  assert.ok(picker, "the emoji picker did not open");
+  assert.equal(picker.search, true, "no search field in the picker");
+  assert.ok(picker.count >= 40, `the picker holds only ${picker.count} emoji`);
+  assert.equal(picker.blank, 0, `${picker.blank} emoji buttons render nothing`);
+  assert.equal(picker.titles, 0, "some emoji buttons have no name for a tooltip or screen reader");
+  assert.ok(/Color Emoji|Segoe UI Emoji|Noto Color Emoji/.test(picker.stack), `emoji are not using a colour emoji font: ${picker.stack}`);
+  assert.equal(picker.scrolls, true, "the picker does not scroll, so the lower groups are unreachable");
+  // the group labels are upper-cased by CSS, so compare what the visitor reads, lower-cased
+  const groups = picker.groups.map((label) => label.toLowerCase());
+  assert.ok(groups.length >= 4 && groups.includes("faces"), `groups read ${picker.groups.join(" / ")}`);
+  assert.ok(!groups.includes("frequently used"), "a brand-new tab claimed a frequently-used row it has not earned");
+  await page.getByRole("textbox", { name: "Search emoji by name" }).fill("snow");
+  const searched = await page.evaluate(() => ({
+    groups: [...document.querySelectorAll(".chat-emoji-group")].map((h) => h.innerText.trim()),
+    items: [...document.querySelectorAll(".chat-emoji-grid button")].map((b) => b.getAttribute("title")),
+  }));
+  assert.deepEqual(searched.groups.map((g) => g.toLowerCase()), ["results"], `search showed groups ${searched.groups.join("/")}`);
+  assert.ok(searched.items.length >= 1 && searched.items.length <= 4, `searching "snow" returned ${searched.items.length} results`);
+  await page.getByRole("textbox", { name: "Search emoji by name" }).fill("qqzz");
+  assert.match((await page.locator(".chat-emoji-empty").innerText()), /Nothing matches/, "an empty search did not say so");
+  await page.getByRole("textbox", { name: "Search emoji by name" }).fill("");
+  await page.locator(".chat-emoji-grid button").first().click();
   const withEmoji = await page.getByRole("textbox", { name: "Your question" }).inputValue();
   assert.match(withEmoji, /\S/, "clicking an emoji did not reach the input");
+  assert.equal(await page.evaluate(() => Boolean(document.querySelector(".chat-emoji"))), false, "picking an emoji left the popover open");
+  // picking one is what earns the "Frequently used" row, so reopening must show it
+  await page.getByRole("button", { name: "Add an emoji" }).click();
+  const again = await page.evaluate(() => [...document.querySelectorAll(".chat-emoji-group")].map((h) => h.innerText.trim().toLowerCase()));
+  assert.equal(again[0], "frequently used", `after one pick the groups read ${again.join("/")}`);
+  // Escape backs out of the popover only — the panel itself stays open
+  await page.keyboard.press("Escape");
+  const afterEsc = await page.evaluate(() => ({ emoji: Boolean(document.querySelector(".chat-emoji")), panel: Boolean(document.querySelector(".chat-panel")) }));
+  assert.equal(afterEsc.emoji, false, "Escape did not close the emoji popover");
+  assert.equal(afterEsc.panel, true, "Escape closed the whole panel from inside the popover");
   await page.getByRole("textbox", { name: "Your question" }).fill("");
-  assert.equal(await page.evaluate(() => Boolean(document.querySelector(".chat-emoji"))), false, "the picker stayed open after picking");
-  ok(`Emoji button works (${picked} faces, inserting into the field, closing after)`);
+  ok(`Emoji picker: ${picker.count} named emoji in ${picker.groups.length - 1} groups, search works, scrolls, and the picked one earns its row`);
 
   // No file picker and no microphone: the composer offers exactly one tool besides
   // sending, because that is all this chat can act on.
@@ -330,27 +374,24 @@ try {
     await page.getByRole("button", { name: "Send your question" }).click();
     await settle();
   };
-  const clickChip = async (label) => {
-    await page.getByRole("dialog", { name: /assistant/i }).getByRole("button", { name: label, exact: true }).click();
-    await settle();
-  };
-
+  // Nothing is offered as a button during the booking any more, so every answer is
+  // typed — which is also how a visitor on a phone will actually answer.
   await answer("I want to book an inspection");
-  await clickChip("Inverter board fault");
+  await answer("inverter board fault");
   await answer("12");
   assert.match(await page.getByRole("dialog", { name: /assistant/i }).innerText(), /your area/i, "an unusable area was accepted without a re-ask");
   await answer("Gulshan-e-Iqbal");
-  await clickChip("Tomorrow");
-  await clickChip("Morning · 9 am–1 pm");
+  await answer("tomorrow");
+  await answer("morning");
   await answer("Ayesha Khan");
   await answer(`smoke-${Date.now()}@example.com`);
   await answer("0300 555 0142");
-  await clickChip("Skip");
-  await clickChip("Yes, go ahead");
+  await answer("skip");
+  await answer("yes you have it");
   const readback = await page.locator(".chat-row-assistant .chat-bubble").last().innerText();
   assert.match(readback, /Here's what I've got/);
   assert.match(readback, /Service:|Area:|Preferred date:/);
-  await clickChip("Yes, send it");
+  await answer("yes, send it");
   const bookedRef = (await page.locator(".chat-booked-ref").innerText().catch(() => "")).trim();
   assert.match(bookedRef, /^FP-[A-F0-9]{8}$/, `chat did not return a reference (got "${bookedRef}")`);
   ok(`Assistant booked an inspection on its own — reference ${bookedRef}`);
@@ -374,21 +415,20 @@ try {
 
   await page.getByRole("textbox", { name: "Your question" }).fill("ok book me");
   await page.getByRole("button", { name: "Send your question" }).click();
-  await page.waitForFunction(() => Boolean(document.querySelector(".chat-chips.is-flow")), null, { timeout: 40000 });
-  const withChips = await box();
-  const meterSeen = await page.locator(".chat-meter i").count();
-
-  await clickChip("AC repair — not cooling or making noise");
-  await settle();
-  await page.getByRole("textbox", { name: "Your question" }).fill("cancel");
-  await page.getByRole("button", { name: "Send your question" }).click();
-  // the meter disappears when the flow ends; the "Start over" chip stays by design
-  // wait for the words themselves, not for a DOM side-effect that can land first
+  // the flow announces its stage in the header subtitle instead of a button row
+  await page.waitForFunction(() => /Step \d of \d+/.test(document.querySelector(".chat-head-text span")?.innerText ?? ""), null, { timeout: 40000 });
+  const midFlow = await box();
+  const flowChrome = await page.evaluate(() => ({
+    label: document.querySelector(".chat-head-text span")?.innerText ?? "",
+    buttons: document.querySelectorAll(".chat-chips, .chat-meter").length,
+  }));
+  assert.match(flowChrome.label, /Step 1 of \d+ · /, `stage label reads ${JSON.stringify(flowChrome.label)}`);
+  assert.equal(flowChrome.buttons, 0, `the flow still renders ${flowChrome.buttons} chip/meter nodes`);
+  await answer("cancel");
   await page.getByRole("dialog", { name: /assistant/i }).getByText(/nothing was saved/i).waitFor({ timeout: 30000 });
-  await page.waitForFunction(() => !document.querySelector(".chat-meter"), null, { timeout: 20000 });
   const afterCancel = await box();
 
-  const states = [["a long reply", afterLong], ["the chip row and meter", withChips], ["cancelling the flow", afterCancel]];
+  const states = [["a long reply", afterLong], ["mid-flow with a stage label", midFlow], ["cancelling the flow", afterCancel]];
   for (const [name, state] of states) {
     assert.equal(state.top, beforeBox.top, `panel top moved ${state.top - beforeBox.top}px after ${name}`);
     assert.equal(state.h, beforeBox.h, `panel height changed ${state.h - beforeBox.h}px after ${name}`);
@@ -396,9 +436,41 @@ try {
     assert.equal(state.w, beforeBox.w, `panel width changed after ${name}`);
     assert.equal(state.logPad, beforeBox.logPad, `text column re-flowed after ${name}`);
   }
-  assert.ok(meterSeen >= 10, `expected a 10-segment meter, saw ${meterSeen}`);
   assert.match(beforeBox.gutter, /stable/, "scrollbar gutter is not reserved, so text shifts when the bar appears");
-  ok(`Panel holds still on desktop: ${beforeBox.w}×${beforeBox.h}px through a long reply, the chip row and a cancel — no shift at all`);
+  ok(`Panel holds still on desktop: ${beforeBox.w}×${beforeBox.h}px through a long reply, the stage label and a cancel — no shift at all`);
+
+  // The reported bug: on a short laptop window the panel's own content squeezed the
+  // composer and the note under it out of view. At every height the input, its send
+  // button and the disclosure must be inside the panel and inside the viewport.
+  for (const height of [720, 660, 600, 540]) {
+    await page.setViewportSize({ width: 1280, height });
+    await page.waitForTimeout(320);
+    const fit = await page.evaluate(() => {
+      const panel = document.querySelector(".chat-panel");
+      const p = panel.getBoundingClientRect();
+      const parts = { input: ".chat-input", disclosure: ".chat-disclosure", head: ".chat-head", actions: ".chat-actions" };
+      const out = { vh: innerHeight, panel: { top: Math.round(p.top), bottom: Math.round(p.bottom) }, hidden: [] };
+      for (const [name, sel] of Object.entries(parts)) {
+        const el = panel.querySelector(sel);
+        if (!el) { out.hidden.push(`${name} missing`); continue; }
+        const r = el.getBoundingClientRect();
+        // "hidden" = outside the panel box, i.e. clipped by overflow:hidden
+        if (r.height < 6 || r.bottom > p.bottom + 1.5 || r.top < p.top - 1.5) out.hidden.push(`${name}(${Math.round(r.top)}..${Math.round(r.bottom)})`);
+      }
+      const greet = panel.querySelector(".chat-greet");
+      if (greet) {
+        const g = greet.getBoundingClientRect();
+        if (g.bottom > p.bottom + 1.5) out.hidden.push("greeting overruns the panel");
+      }
+      return out;
+    });
+    assert.equal(fit.panel.top >= 0, true, `panel runs above the viewport at 1280x${height} (top ${fit.panel.top})`);
+    assert.equal(fit.panel.bottom <= fit.vh + 1, true, `panel bottom ${fit.panel.bottom} is past the ${fit.vh}px viewport at 1280x${height}`);
+    assert.deepEqual(fit.hidden, [], `composer parts clipped at 1280x${height}: ${fit.hidden.join(", ")}`);
+  }
+  ok("Nothing is cut off on short laptop windows: 1280×720/660/600/540 all keep head, input and note inside the panel");
+  await page.setViewportSize({ width: 1456, height: 900 });
+  await page.waitForTimeout(200);
 
   // Desktop must not be cramped or cut off any more.
   const geometry = await page.evaluate(() => {

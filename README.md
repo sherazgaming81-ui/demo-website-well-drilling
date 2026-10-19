@@ -11,13 +11,13 @@ npm ci
 npm run dev          # http://localhost:3000
 ```
 
-Nothing to configure. The assistant answers from the offline knowledge base until a key is set.
+Set a Dahl key for the assistant, or leave it out — without one the chat says plainly that it cannot answer and points at the phone number and the form. It never invents an answer.
 
 ## Changing niche, brand or copy
 
 Everything a client would edit lives in **`src/lib/site-data.ts`**: name, tagline, phone/WhatsApp, hours, office, `refPrefix` (the reference the office quotes back), services, stats, proof points, brands marquee, process steps, FAQs, gallery, the estimate form's service list, and `serviceAreas` — the list the locality pages are generated from.
 
-That one file also feeds the assistant: the system brief and the offline answers are generated from it at request time, so the chatbot can never disagree with the page. Swapping `site-data.ts` swaps the business — including what the bot talks about.
+That one file also feeds the assistant: the system brief it is given is generated from it at request time, so the chatbot can never disagree with the page. Swapping `site-data.ts` swaps the business — including what the bot talks about.
 
 Design and motion live in `src/app/globals.css`:
 - tokens at the top (`--paper`, `--ink`, `--blue`, `--navy`, `--frost`, `--amber`, `--line`)
@@ -33,15 +33,24 @@ Design and motion live in `src/app/globals.css`:
 
 ## Assistant
 
-- `POST /api/chat` streams SSE and never dead-ends: each model is tried in order, and if all of them fail or none is configured, the offline knowledge base answers — **including a completed booking**
+- `POST /api/chat` streams SSE and tries each model in the list in order. If the whole chain fails
+  — or no key is set — it answers **503 with one honest sentence** and the number to call, because a
+  scripted "knowledge base" reply is a guess wearing a brand's name. The visitor is never stranded:
+  the phone number and the inspection form are one tap away in the panel
+- the guided booking works whether or not a model answers, because it is not a model: `booking-flow.ts`
+  is a deterministic state machine on the server, so an outage never loses a request mid-conversation
 - `GET /api/chat` reports what is wired up, without exposing keys
 - **one surface**: the floating box on the home page. There used to be a `/assistant` page for
   long answers; it is gone, and `Expand window` in the panel's ⋯ menu does that job in place —
-  one widget, so behaviour, validation and the offline fallback cannot exist in two versions
+  one widget, so behaviour and validation cannot exist in two versions
 - the panel opens on a greeting (*Hi there 👋 / How can we help?*) with four starters, then the
-  transcript: bubbles with a `Freeze Point · AI assistant · just now` line under each answer,
-  an emoji button, and deliberately **no** attachment or voice control — a paperclip that cannot
-  receive a file is a dead end, which is the one thing this widget is not allowed to be
+  transcript: bubbles with a `Freeze Point · AI assistant · just now` line under each answer, a
+  searchable emoji picker (groups, colour-emoji font, and a *Frequently used* row only once the
+  visitor has earned it by using one), and deliberately **no** attachment or voice control — a
+  paperclip that cannot receive a file is a dead end, which is the one thing this widget is not
+  allowed to be
+- the booking flow asks **in words and nothing else**: no chip row and no progress bar, because a
+  visitor typing an answer is the same answer, and the stage it is on is said in the header line
 - the conversation is kept in `sessionStorage` (`freezepoint.chat.v1`) with its `sessionId`, so a
   reload offers the last message back on a *Recent message* card instead of dumping a half-finished
   booking on the floor. Nothing is sent by it, it dies with the tab, and `Start a new chat` clears
@@ -98,7 +107,7 @@ npm run check:deploy                                   # against a deployed URL
 node scripts/make-og.mjs                                 # rebuilds public/og.jpg from site-data + real fonts
 ```
 
-`smoke-test.mjs` (38 checks) walks the journey in Chromium: every image must decode with no 404, the marquee and contour motion must run, an estimate must complete through the chat UI and return an `FP-########` reference, the desktop panel must hold still through a long reply and a chip row, the greeting must not invent a history and the option menu must resize / download / clear for real, ten widths from 1600px to 320px must show no overflow and no clipped text, phones must get no decorative loops, `prefers-reduced-motion` must show everything with animation off, and the run must end with zero console errors and zero failed requests.
+`smoke-test.mjs` (39 checks) walks the journey in Chromium: every image must decode with no 404, the marquee and contour motion must run, an estimate must complete through the chat UI and return an `FP-########` reference, the desktop panel must hold still through a long reply and a stage change and must not clip its own composer at 720/660/600/540px of height, the greeting must not invent a history and the option menu must resize / download / clear for real, ten widths from 1600px to 320px must show no overflow and no clipped text, phones must get no decorative loops, `prefers-reduced-motion` must show everything with animation off, and the run must end with zero console errors and zero failed requests.
 
 `scripts/make-og.mjs` renders the 1200x630 share card in Chromium from the same `site-data.ts` (it asserts the two web fonts and
 both images actually loaded, because a silently-fallback OG card is exactly the kind of thing that ships broken), then downsamples

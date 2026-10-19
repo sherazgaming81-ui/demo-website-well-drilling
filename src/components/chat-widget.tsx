@@ -27,6 +27,8 @@ type FlowProgress = { stage: string; label: string } | null;
 type Saved = { sessionId: string; turns: ChatTurn[] };
 
 const STORE_KEY = "freezepoint.chat.v1";
+/** The picker's "frequently used" row is measured in this tab, never assumed. */
+const EMOJI_STORE_KEY = "freezepoint.emoji.v1";
 /** Kept short on both ends: the last few turns are enough to pick a chat back up,
  *  and this is a tab-local note, not an archive. */
 const KEEP_TURNS = 14;
@@ -38,10 +40,74 @@ const STARTERS = [
   "Book a free inspection",
 ] as const;
 
-const EMOJIS = ["👍", "🙏", "😊", "😅", "❄️", "🔧", "🧊", "", "", "💨", "✅", "📞"] as const;
+/**
+ * The picker's alphabet, spelled in code points on purpose: emoji pasted into a source
+ * file can survive as blank boxes, and a blank button in a picker is exactly the dead
+ * control this widget is not allowed to ship. The check under this table refuses an
+ * empty or duplicated entry at build time instead of in front of a visitor.
+ */
+const cp = (...points: number[]) => String.fromCodePoint(...points);
+type EmojiGroup = { group: string; items: [string, string][] };
+const EMOJI_GROUPS: EmojiGroup[] = [
+  {
+    group: "Quick replies",
+    items: [
+      ["thumbs up", cp(0x1f44d)], ["thumbs down", cp(0x1f44e)], ["please", cp(0x1f64f)], ["slight smile", cp(0x1f642)],
+      ["laughing", cp(0x1f605)], ["yes", cp(0x2705)], ["no", cp(0x274c)], ["snowflake", cp(0x2744, 0xfe0f)],
+      ["wrench", cp(0x1f527)], ["phone", cp(0x1f4de)],
+    ],
+  },
+  {
+    group: "Faces",
+    items: [
+      ["grinning", cp(0x1f600)], ["big eyes", cp(0x1f603)], ["beaming", cp(0x1f601)], ["squint", cp(0x1f606)],
+      ["tears of joy", cp(0x1f602)], ["rofl", cp(0x1f923)], ["smirk", cp(0x1f60f)], ["wink", cp(0x1f609)],
+      ["heart eyes", cp(0x1f60d)], ["relieved", cp(0x1f62c)], ["sunglasses", cp(0x1f60e)], ["thinking", cp(0x1f914)],
+      ["neutral", cp(0x1f610)], ["expressionless", cp(0x1f611)], ["unamused", cp(0x1f612)], ["rolling eyes", cp(0x1f644)],
+      ["worried", cp(0x1f61f)], ["frowning", cp(0x1f61e)], ["anguished", cp(0x1f627)], ["crying", cp(0x1f622)],
+      ["sobbing", cp(0x1f62d)], ["weary", cp(0x1f629)], ["angry", cp(0x1f620)], ["hot", cp(0x1f975)],
+      ["cold", cp(0x1f976)], ["sleepy", cp(0x1f634)], ["sick", cp(0x1f912)], ["party", cp(0x1f973)],
+    ],
+  },
+  {
+    group: "Hands",
+    items: [
+      ["wave", cp(0x1f44b)], ["clap", cp(0x1f44f)], ["raised hands", cp(0x1f64c)], ["handshake", cp(0x1f91d)],
+      ["ok hand", cp(0x1f44c)], ["victory", cp(0x270c, 0xfe0f)], ["point right", cp(0x1f449)], ["point left", cp(0x1f448)],
+      ["strong", cp(0x1f4aa)], ["folded hands", cp(0x1f64f)],
+    ],
+  },
+  {
+    group: "Cooling, home and tools",
+    items: [
+      ["house", cp(0x1f3e0)], ["snowman", cp(0x2603, 0xfe0f)], ["ice", cp(0x1f9ca)], ["dashing away", cp(0x1f4a8)],
+      ["hammer and wrench", cp(0x1f6e0, 0xfe0f)], ["gear", cp(0x2699, 0xfe0f)], ["electric plug", cp(0x1f50c)],
+      ["light bulb", cp(0x1f4a1)], ["thermometer", cp(0x1f321)], ["sun", cp(0x2600, 0xfe0f)], ["moon", cp(0x1f319)],
+      ["high voltage", cp(0x26a1)], ["broom", cp(0x1f9f9)], ["bucket", cp(0x1faa3)], ["droplet", cp(0x1f4a7)],
+      ["wind face", cp(0x1f32c)],
+    ],
+  },
+  {
+    group: "Marks, dates and the office",
+    items: [
+      ["check mark", cp(0x2714, 0xfe0f)], ["checked box", cp(0x2611, 0xfe0f)], ["cross mark", cp(0x274c)],
+      ["warning", cp(0x26a0, 0xfe0f)], ["question", cp(0x2753)], ["exclamation", cp(0x2757)], ["bell", cp(0x1f514)],
+      ["calendar", cp(0x1f4c5)], ["memo", cp(0x1f4dd)], ["speech bubble", cp(0x1f4ac)], ["star", cp(0x2b50)],
+      ["hourglass", cp(0x231b)], ["truck", cp(0x1f69a)], ["money bag", cp(0x1f4b0)], ["outbox", cp(0x1f4e4)],
+      ["mobile phone", cp(0x1f4f1)],
+    ],
+  },
+];
+const EMOJIS = EMOJI_GROUPS.flatMap((set) => set.items.map(([name, ch]) => ({ name, ch, group: set.group })));
+{
+  const blank = EMOJIS.filter((emoji) => emoji.ch.trim().length === 0).length;
+  const names = new Set(EMOJIS.map((emoji) => `${emoji.group}/${emoji.name}`));
+  if (blank) throw new Error(`emoji picker: ${blank} entr${blank === 1 ? "y" : "ies"} produced no glyph`);
+  if (names.size !== EMOJIS.length) throw new Error("emoji picker: two entries share one name");
+  if (EMOJIS.length < 40) throw new Error(`emoji picker: only ${EMOJIS.length} entries`);
+}
 
 const SENTINEL = /\[\[(BOOK|SERVICE:([a-z0-9-]+))\]\]/gi;
-const STAGES = ["service", "zip", "date", "time", "name", "email", "phone", "notes", "consent", "confirm"] as const;
 
 function parseSentinels(raw: string): { text: string; book: boolean; service: string | null } {
   let book = false;
@@ -120,10 +186,20 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
   const [provider, setProvider] = useState<string | null>(null);
   const [nudgeBook, setNudgeBook] = useState(false);
   const [serviceHint, setServiceHint] = useState<string | null>(null);
-  const [chips, setChips] = useState<string[]>([]);
   const [progress, setProgress] = useState<FlowProgress>(null);
   const [reference, setReference] = useState<string | null>(null);
   const [menu, setMenu] = useState<"none" | "options" | "emoji">("none");
+  const [emojiQuery, setEmojiQuery] = useState("");
+  const [recentEmoji, setRecentEmoji] = useState<string[]>(() => {
+    try {
+      const raw = typeof window === "undefined" ? null : sessionStorage.getItem(EMOJI_STORE_KEY);
+      const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+      return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string").slice(0, 8) : [];
+    } catch {
+      return [];
+    }
+  });
+  const emojiSearchRef = useRef<HTMLInputElement>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -141,7 +217,7 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
     if (node) node.scrollTop = node.scrollHeight;
   }, []);
 
-  useEffect(scrollToEnd, [turns, busy, chips, open, scrollToEnd]);
+  useEffect(scrollToEnd, [turns, busy, open, scrollToEnd]);
 
   // Keep the tab copy short and current. Written on every change so a reload in the
   // middle of the guided flow lands back on the same step.
@@ -172,7 +248,7 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("mousedown", onClick);
-    const focusTimer = setTimeout(() => inputRef.current?.focus(), 220);
+    const focusTimer = setTimeout(() => (menu === "emoji" ? emojiSearchRef.current : inputRef.current)?.focus(), 220);
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("mousedown", onClick);
@@ -200,7 +276,6 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
     setMenu("none");
     setTurns([]);
     setDraft("");
-    setChips([]);
     setProgress(null);
     setReference(null);
     setNudgeBook(false);
@@ -229,11 +304,33 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
   function addEmoji(emoji: string) {
     setDraft((current) => `${current}${current && !/\s$/.test(current) ? " " : ""}${emoji}`);
     setMenu("none");
+    setEmojiQuery("");
+    setRecentEmoji((current) => {
+      const next = [emoji, ...current.filter((item) => item !== emoji)].slice(0, 8);
+      try {
+        sessionStorage.setItem(EMOJI_STORE_KEY, JSON.stringify(next));
+      } catch {
+        /* no tab storage, no memory of it — the picker still works */
+      }
+      return next;
+    });
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
+  /* The picker: a search field first (that is how people actually use one), then the
+     groups. "Frequently used" only appears once the visitor has used it in this tab. */
+  const query = emojiQuery.trim().toLowerCase();
+  const recentItems = recentEmoji.map((ch) => ({ name: "used recently", ch }));
+  const searched = EMOJIS.filter((emoji) => emoji.name.toLowerCase().includes(query) || emoji.ch === emojiQuery.trim());
+  const pickedGroups: { group: string; items: { name: string; ch: string }[] }[] = query
+    ? [{ group: "Results", items: searched }]
+    : [
+        ...(recentItems.length ? [{ group: "Frequently used", items: recentItems }] : []),
+        ...EMOJI_GROUPS.map((set) => ({ group: set.group, items: set.items.map(([name, ch]) => ({ name, ch })) })),
+      ];
+  const pickedCount = pickedGroups.reduce((total, set) => total + set.items.length, 0);
+
   function resetFlowUI() {
-    setChips([]);
     setProgress(null);
   }
 
@@ -307,7 +404,6 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
               type: string;
               text?: string;
               message?: string;
-              chips?: string[];
               progress?: FlowProgress;
               booked?: { reference: string };
             };
@@ -321,7 +417,8 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
             } else if (payload.type === "error" && payload.message) {
               updateLast((turn) => ({ ...turn, error: true }));
             } else if (payload.type === "booking") {
-              setChips(Array.isArray(payload.chips) ? payload.chips : []);
+              // Only the stage label is surfaced (in the header). The flow asks in
+              // words and answers in words; no button row is injected mid-booking.
               setProgress(payload.progress ?? null);
               if (payload.booked?.reference) {
                 setReference(payload.booked.reference);
@@ -372,7 +469,6 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
     if (suggestedService) setServiceHint(suggestedService);
   }, [suggestedService]);
 
-  const stageIndex = progress ? STAGES.indexOf(progress.stage as (typeof STAGES)[number]) : -1;
   const greeting = !turns.length;
   const recent = saved?.turns.filter((turn) => turn.role === "assistant").pop();
   const recentLine = recent ? parseSentinels(recent.content).text.split("\n")[0] : "";
@@ -402,7 +498,7 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
           className={`chat-panel${expanded ? " is-expanded" : ""}`}
           role="dialog"
           aria-label={`${business.name} assistant`}
-          data-provider={provider ?? "offline"}
+          data-provider={provider ?? "unreachable"}
           data-stage={progress?.stage ?? "chat"}
         >
           <header className="chat-head">
@@ -450,16 +546,9 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
             </div>
           </header>
 
-          {progress && stageIndex >= 0 && (
-            <div className="chat-meter" role="progressbar" aria-valuemin={1} aria-valuemax={STAGES.length} aria-valuenow={stageIndex + 1} aria-label="Booking progress">
-              {STAGES.map((stage) => (
-                <i key={stage} className={stageIndex >= STAGES.indexOf(stage) ? "is-done" : ""} />
-              ))}
-            </div>
-          )}
-
           {greeting ? (
             <div className="chat-greet">
+              <div className="chat-greet-in">
               <p className="chat-greet-hi">Hi there <span aria-hidden="true">👋</span></p>
               <h2>How can we help?</h2>
               <p className="chat-greet-sub">
@@ -476,6 +565,7 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
                   <span className="chat-recent-go">Pick the chat back up<Icon name="arrow-right" size={13} /></span>
                 </button>
               )}
+              </div>
             </div>
           ) : (
             <div className="chat-log" ref={logRef} role="log" aria-live="polite" aria-relevant="additions text">
@@ -525,16 +615,6 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
           {greeting && (
             <div className="chat-starters" aria-label="Common questions">
               {STARTERS.map((chip) => (
-                <button key={chip} type="button" onClick={() => send(chip)} disabled={busy}>
-                  {chip}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {!!chips.length && (
-            <div className="chat-chips is-flow" aria-label="Suggested answers">
-              {chips.map((chip) => (
                 <button key={chip} type="button" onClick={() => send(chip)} disabled={busy}>
                   {chip}
                 </button>
@@ -592,10 +672,32 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
                 </svg>
               </button>
               {menu === "emoji" && (
-                <div className="chat-emoji" role="menu" aria-label="Emoji">
-                  {EMOJIS.map((emoji) => (
-                    <button key={emoji} type="button" role="menuitem" onClick={() => addEmoji(emoji)}>{emoji}</button>
-                  ))}
+                <div className="chat-emoji" role="dialog" aria-modal="false" aria-label="Emoji picker">
+                  <label className="sr-only" htmlFor="chat-emoji-search">Search emoji by name</label>
+                  <input
+                    id="chat-emoji-search"
+                    ref={emojiSearchRef}
+                    className="chat-emoji-search"
+                    value={emojiQuery}
+                    onChange={(event) => setEmojiQuery(event.target.value.slice(0, 24))}
+                    placeholder="Search emoji…"
+                    autoComplete="off"
+                  />
+                  <div className="chat-emoji-scroll">
+                    {pickedGroups.map((set) => (
+                      <div key={set.group}>
+                        <p className="chat-emoji-group">{set.group}</p>
+                        <div className="chat-emoji-grid">
+                          {set.items.map((item) => (
+                            <button key={`${set.group}-${item.name}`} type="button" onClick={() => addEmoji(item.ch)} title={item.name} aria-label={`${item.name} emoji`}>
+                              {item.ch}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                    {!pickedCount && <p className="chat-emoji-empty">Nothing matches “{emojiQuery.trim()}”.</p>}
+                  </div>
                 </div>
               )}
             </div>

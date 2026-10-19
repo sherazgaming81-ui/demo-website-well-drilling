@@ -73,8 +73,8 @@ check("an unusable area was re-asked, not accepted", /area/i.test(seen["area-bad
 check("consent step read the whole request back", /Here's what I've got/i.test(seen.consent.text ?? ""));
 const reference = seen["confirm"].booking?.booked?.reference;
 check("chat booked and returned a real reference", /^FP-[A-F0-9]{8}$/.test(reference ?? ""), String(reference));
-check("progress meter tracked the flow", (seen["time"].booking?.progress?.label ?? "").includes("of 10"), seen["time"].booking?.progress?.label);
-check("chips were offered for the choice steps", (seen.start.booking?.chips?.length ?? 0) >= 5, `${seen.start.booking?.chips?.length} service chips`);
+check("the flow names its stage (the header line, not a bar)", (seen["time"].booking?.progress?.label ?? "").includes("of 10"), seen["time"].booking?.progress?.label);
+check("the flow no longer sends a chip row at all", seen.start.booking?.chips === undefined, JSON.stringify(seen.start.booking ?? {}).slice(0, 70));
 
 // The store is shared with the form: four more from this email plus the chat booking
 // must hit the five-per-hour limit, proving the chat wrote to the real store.
@@ -83,7 +83,7 @@ for (let index = 0; index < 6; index++) {
   const res = await fetch(`${base}/api/bookings`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ service: "ac-inverter", area: "Gulshan-e-Iqbal", preferredDate: new Date(Date.now() + 2 * 864e5).toISOString().slice(0, 10), timePreference: "morning", fullName: "Alex Rivera", email, phone: "(904) 555-0142", notes: "", consent: true, website: "", requestId: crypto.randomUUID() }),
+    body: JSON.stringify({ service: "ac-inverter", area: "Gulshan-e-Iqbal", preferredDate: new Date(Date.now() + 2 * 864e5).toISOString().slice(0, 10), timePreference: "morning", fullName: "Alex Rivera", email, phone: "0300 555 0142", notes: "", consent: true, website: "", requestId: crypto.randomUUID() }),
   });
   if (res.status === 429) blocked++;
 }
