@@ -1273,3 +1273,104 @@ h1 > span { display: block; white-space: nowrap; }
   .process-step.is-active { transform: none; box-shadow: none; }
 }
 @media (prefers-reduced-motion: reduce) { .process-rail i::after { transition: none; } .process-step.is-active { transform: none; box-shadow: none; } }
+
+/* ══ Area pages (/areas, /areas/[area]) ═══════════════════════════════════
+   Extra routes, same design language: the container, the header and the footer
+   are the home page's own, so a locality page cannot look like a different
+   site. No motion here on purpose - these pages are there to be read and to be
+   fast, and nothing on them needs a scroll listener to make sense. */
+.sub-header { position: sticky; }
+.sub-nav { display: flex; align-items: center; gap: 26px; margin-inline: auto; }
+.sub-nav a { font-size: 12px; font-weight: 550; white-space: nowrap; color: var(--muted); transition: color .2s; }
+.sub-nav a:hover { color: var(--blue); }
+.sub-nav a[aria-current="page"] { color: var(--ink); }
+.sub-inner { padding: 30px 0 88px; }
+.sub-crumb { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); margin-bottom: 26px; }
+.sub-crumb a { color: var(--muted); }
+.sub-crumb a:hover { color: var(--blue); }
+.sub-crumb span { display: inline-flex; align-items: center; gap: 6px; }
+.sub-crumb [aria-current="page"] { color: var(--ink); font-weight: 600; }
+
+.sub-hero { max-width: 780px; }
+.sub-hero h1 { font-size: clamp(30px, 3.4vw, 44px); line-height: 1.14; letter-spacing: -1.5px; font-weight: 600; margin: 14px 0 16px; }
+.sub-hero h1 > span { color: var(--blue); }
+.sub-hero > p { font-size: 15px; line-height: 1.85; color: var(--muted); }
+.sub-hero-facts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+.sub-hero-facts span { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 600; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 100px; padding: 8px 13px; }
+.sub-hero-facts svg { color: var(--blue); }
+.sub-hero-actions, .sub-band-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 26px; }
+.sub-band-actions .button { min-height: 48px; font-size: 12.5px; gap: 12px; }
+
+.areas-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; margin-top: 46px; }
+.area-card { display: flex; flex-direction: column; gap: 12px; background: white; border: 1px solid var(--line); border-radius: 14px; padding: 22px 22px 20px; transition: transform .2s, box-shadow .2s, border-color .2s; }
+.area-card:hover { transform: translateY(-3px); box-shadow: 0 14px 30px #0a25360f; border-color: #bed8e8; }
+.area-card:focus-visible { outline: 3px solid #6094ff; outline-offset: 3px; }
+.area-card-top { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
+.area-card-name { font-family: "Freeze Display", "Freeze Body", Arial, sans-serif; font-size: 26px; letter-spacing: -1px; font-weight: 600; }
+.area-card-top svg { color: var(--blue); transition: transform .2s; }
+.area-card:hover .area-card-top svg { transform: translate(2px, -2px); }
+.area-card-label { font-size: 11px; font-weight: 700; letter-spacing: 1.2px; color: var(--blue); text-transform: uppercase; }
+.area-card-fact { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
+.area-card-watch { font-size: 13px; line-height: 1.7; color: var(--ink); }
+.area-card-services { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 2px; }
+.area-chip { font-size: 10.5px; font-weight: 650; letter-spacing: .4px; color: var(--blue-dark); background: var(--chill-bg); border-radius: 100px; padding: 5px 10px; white-space: nowrap; }
+
+.area-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; margin-top: 46px; }
+.area-facts > div { background: var(--chill-bg); border-radius: 14px; padding: 24px; }
+.area-facts h2 { display: flex; align-items: center; gap: 9px; font-size: 15px; letter-spacing: -.2px; font-weight: 700; margin-bottom: 10px; }
+.area-facts h2 svg { color: var(--blue); }
+.area-facts p { font-size: 13.5px; line-height: 1.8; color: #2c4c5e; }
+
+.area-services { margin-top: 56px; }
+.area-services > h2, .area-faq > h2, .area-nearby > h2 { font-size: clamp(24px, 2.4vw, 32px); letter-spacing: -1.1px; margin-bottom: 20px; }
+.area-services-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.area-service { display: flex; flex-direction: column; gap: 9px; background: white; border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+.area-service-number { font-size: 10px; font-weight: 700; letter-spacing: 1.1px; color: var(--muted); }
+.area-service h3 { font-size: 19px; letter-spacing: -.5px; font-weight: 600; }
+.area-service p { font-size: 13px; line-height: 1.75; color: var(--muted); flex-grow: 1; }
+.area-service a { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 650; color: var(--blue); }
+.area-service a:hover { color: var(--blue-dark); }
+.area-services-note { margin-top: 18px; font-size: 12.5px; color: var(--muted); }
+.area-services-note a { color: var(--blue); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+
+.area-faq { margin-top: 56px; max-width: 860px; }
+.area-faq details { border-top: 1px solid var(--line); padding: 4px 0; }
+.area-faq details:last-of-type { border-bottom: 1px solid var(--line); }
+.area-faq summary { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 17px 0; font-size: 15px; font-weight: 600; cursor: pointer; list-style: none; }
+.area-faq summary::-webkit-details-marker { display: none; }
+.area-faq summary svg { color: var(--blue); transition: transform .2s; }
+.area-faq details[open] summary svg { transform: rotate(45deg); }
+.area-faq details p { font-size: 13.5px; line-height: 1.85; color: var(--muted); padding: 0 0 19px; max-width: 720px; }
+
+.area-nearby { margin-top: 52px; }
+.area-nearby-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.area-nearby-link { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 100px; padding: 10px 15px; transition: border-color .2s, color .2s; }
+.area-nearby-link svg { color: var(--blue); }
+.area-nearby-link:hover { border-color: var(--blue); color: var(--blue-dark); }
+.area-nearby-link.is-all { background: var(--navy); border-color: var(--navy); color: white; }
+.area-nearby-link.is-all svg { color: var(--frost); }
+.area-nearby-link.is-all:hover { border-color: var(--blue); color: var(--frost); }
+
+.sub-band { display: grid; grid-template-columns: minmax(0, 1.15fr) auto; gap: 26px; align-items: center; background: var(--navy); color: white; border-radius: 18px; padding: 34px; margin-top: 56px; }
+.sub-band h2 { font-size: clamp(22px, 2.2vw, 30px); letter-spacing: -1px; }
+.sub-band p { margin-top: 12px; font-size: 13px; line-height: 1.8; color: #a6c2cf; max-width: 620px; }
+.sub-band .button-white { color: var(--ink); }
+
+/* Three columns, so the sub-page footer does not leave the fourth slot empty. */
+.sub-footer .footer-grid { grid-template-columns: 1.25fr 1fr 1.1fr; }
+.sub-footer .footer-column a { font-size: 12.5px; }
+
+/* The strip on the home page that hands readers to the area pages. */
+.home-areas { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 34px; }
+.home-areas > span { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: var(--muted); margin-right: 4px; }
+.home-areas a { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 100px; padding: 9px 14px; transition: border-color .2s, color .2s, transform .2s; }
+.home-areas a:hover { border-color: var(--blue); color: var(--blue-dark); transform: translateY(-2px); }
+
+@media (max-width: 860px) {
+  .sub-nav { display: none; }
+  .sub-inner { padding: 22px 0 62px; }
+  .areas-grid, .area-facts, .area-services-grid { grid-template-columns: 1fr; }
+  .sub-band { grid-template-columns: 1fr; padding: 24px; }
+  .area-card { padding: 18px; }
+  .sub-hero-actions .button, .sub-band-actions .button { width: 100%; }
+}

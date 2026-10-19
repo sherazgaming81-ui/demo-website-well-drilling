@@ -155,6 +155,116 @@ export const faqs = [
   { question: "Do you handle commercial and ducted systems?", answer: "Yes — ceiling cassettes, ducted runs and rooftop packages for shops, clinics, offices and restaurants, including annual maintenance contracts that put the deep clean in March instead of in the middle of a June breakdown." },
 ] as const;
 
+/**
+ * Where the vans actually go. One page per area, generated from this list, so a
+ * locality page and the assistant can never disagree about coverage: both read
+ * the same names. `jobs` are ids from `services`, `nearby` are slugs.
+ */
+export const serviceAreas = [
+  {
+    slug: "clifton",
+    name: "Clifton",
+    label: "Clifton & the seafront blocks",
+    blocks: "Blocks 1–9, Boat Basin, Khayaban-e-Ittehad",
+    eta: "25–40 min from Shahrah-e-Faisal",
+    intro: "Salt air off the sea is the whole story in Clifton. Outdoor coils here pit and choke faster than anywhere else in the city, and a unit that was washed last March is already working harder than it should. Most flats also have one fixed condenser ledge, so the pipe run decides what we can reach.",
+    watchFor: "Corroded fin packs, white oxide at the bracket bolts, and drain lines that were routed into a shaft with no clean-out.",
+    services: ["ac-service", "ac-gas", "ac-repair"],
+    access: "Most buildings need the society's permission slip for a rooftop, and lifts are small — we bring the short ladder and the strap, not a scaffold.",
+    faqs: [
+      { question: "How often should a Clifton unit be serviced?", answer: "Twice a year is the honest answer on the seafront: once before the season and once after it. Salt and dust build a crust on the outdoor coil that a filter cleaning will not touch, and a crust that thick makes the compressor run long for air that is only lukewarm." },
+      { question: "Can you clean the outdoor coil on a Clifton high-rise?", answer: "Where the ledge is reachable from the inside, yes — jet wash, containment sheeting below and a second man on the strap. Where it is not, we say so on the inspection instead of improvising on a ledge, and the options get written down for you." },
+      { question: "Why does my gas keep running low in Clifton?", answer: "Salt air eats the joints before it eats the copper. A flare nut that looked fine last year is usually pitted by now, so the leak comes back after a top-up. We open the joint, re-flare it, pressure-test and then charge by weight — that order is the whole job." },
+    ],
+    nearby: ["dha", "gulshan-e-iqbal", "saddar-shahrah"],
+  },
+  {
+    slug: "dha",
+    name: "DHA",
+    label: "DHA Karachi, Phases 1–8",
+    blocks: "Phases 1–8, including the newer commercial belts",
+    eta: "20–35 min from Shahrah-e-Faisal",
+    intro: "DHA houses run more units per roof than anywhere else we visit — usually four to seven splits, a few cassettes in the newer shops, and increasingly a ducted run in a rebuilt house. That means faults here are less about the unit and more about how it was installed and what it has been asked to carry.",
+    watchFor: "Long pipe runs with no trap at the indoor unit, condensers bolted to a parapet without isolators, and boards swapped on a guess by whoever was there first.",
+    services: ["ac-install", "ac-inverter", "ac-ducted"],
+    access: "Gate paperwork and a photo ID at the guard post are normal; tell us the phase in the request and we arrive with the right documents instead of waiting at the gate.",
+    faqs: [
+      { question: "Do you install the unit a shop asked for, or the one that fits?", answer: "We fit what the room needs. On an inspection we size the space — glazing, ceiling height, how many people, what the roof does at 4 pm — and if the unit you picked is too small or wildly oversized, we say so before quoting, with the numbers we used." },
+      { question: "A whole-house ducted system — is that your work?", answer: "Yes, service and repair of it. Full duct redesign is a different trade and we will name one rather than learn it on your ceiling. What we do daily is filters, coils, drains, dampers, belt and blower faults, and the rooftop package that feeds the lot." },
+      { question: "My inverter board was replaced twice and still trips. Now what?", answer: "Then the board probably was not the fault. A supply that sags when the neighbourhood load rises, or an outdoor fan bearing that is dragging, will kill board after board. We bench-test the board, then read the supply and fan current under load, and put the readings on the job card." },
+    ],
+    nearby: ["clifton", "saddar-shahrah", "malir"],
+  },
+  {
+    slug: "gulshan-e-iqbal",
+    name: "Gulshan-e-Iqbal",
+    label: "Gulshan-e-Iqbal & University Road",
+    blocks: "Blocks 5–13, University Road, Shahrah-e-Noor",
+    eta: "15–30 min from Shahrah-e-Faisal",
+    intro: "Dense flats, small balconies and a coil that has never seen water. Gulshan is where we see the most units running on a balcony with the door shut, which is a heat-short-circuit: the condenser re-breathes its own hot air, the pressure climbs and the compressor cuts out by 9 pm — while the bill keeps growing all month.",
+    watchFor: "Condenser sharing a closed balcony with the kitchen exhaust, blocked drain lines running into a shaft, and brackets that have crept off level in a soft wall.",
+    services: ["ac-repair", "ac-service", "ac-gas"],
+    access: "Most buildings here want a time window rather than a day, so we give a two-hour slot on the call and text when the van is 20 minutes out.",
+    faqs: [
+      { question: "My AC cuts off every evening. Is the compressor gone?", answer: "Usually not. A condenser that cannot breathe trips the unit on high pressure once the balcony air is hot, and a choked coil does the same thing on a milder evening. It reads like a dead compressor and costs a fraction of one, which is exactly why we test pressures before quoting anything." },
+      { question: "Water is dripping through my ceiling in a Gulshan flat.", answer: "Switch the unit off at the isolator first, then call. Most often it is a blocked drain line or an indoor unit that has slipped off level, and occasionally a frozen coil thawing inside the wall cavity. Left alone it stains the slab above you and swells the plaster — this is a one-day repair that becomes a renovation if you wait a month." },
+      { question: "Do you work in the older blocks with aluminium wiring?", answer: "Yes, and we check the supply before we touch the unit. Aluminium terminations oxidise and a loose connection at the isolator will look exactly like a failed board. Tightening, re-terminating and reading the voltage under load takes ten minutes and saves a lot of guessing." },
+    ],
+    nearby: ["north-nazimabad", "clifton", "saddar-shahrah"],
+  },
+  {
+    slug: "north-nazimabad",
+    name: "North Nazimabad",
+    label: "North Nazimabad & Safoora Chowrangi",
+    blocks: "Blocks 1–10, Safoora Chowrangi, Larknose",
+    eta: "25–40 min from Shahrah-e-Faisal",
+    intro: "Houses from the sixties and seventies, rewired more than once, with the AC on whatever circuit had room. In North Nazimabad the fault is very often upstream of the air conditioner: a breaker that has gone soft, an isolator that arcs, or a shared neutral that cannot carry a compressor starting on a hot night.",
+    watchFor: "Unfused isolators, breakers rated below the unit's draw, and outdoor units mounted on a protruding slab where wind takes the bracket out of the plaster.",
+    services: ["ac-repair", "ac-gas", "ac-service"],
+    access: "Narrow lanes mean we park short and walk the tools, so we allow an extra ten minutes rather than keeping you waiting by the door.",
+    faqs: [
+      { question: "The breaker trips only when the AC starts. What is that?", answer: "Either the breaker has tired out — they do, and a 16A that trips at 12A is a common find here — or the compressor is drawing high on a low supply. A clamp meter tells us which in about two minutes. Replacing a breaker is small work; replacing a compressor because nobody measured is not." },
+      { question: "My unit is an old fixed-speed one. Repair it or replace it?", answer: "We measure first. If it still pulls its rated current, holds a charge and throws cold air on a mild evening, cleaning, gas and a new capacitor will carry it another few seasons for a fraction of a replacement. If the efficiency has gone, we show you the readings and say replace — no sermon." },
+      { question: "Can you work on window units too?", answer: "Yes — the same coil wash, the same gas work, and the same argument about whether the sleeve has been sealed. Half the noise in a window unit is the case rattling in a gap that was never filled with foam." },
+    ],
+    nearby: ["gulshan-e-iqbal", "saddar-shahrah", "malir"],
+  },
+  {
+    slug: "malir",
+    name: "Malir",
+    label: "Malir & the eastern belt",
+    blocks: "Rashid Minhas Road, Gulzar-e-Meherban, Jinnah Garden",
+    eta: "35–55 min from Shahrah-e-Faisal, longer in afternoon heat",
+    intro: "Malir is usually two or three degrees hotter than the seafront, and the units here run from noon to well past midnight. That is a hard life for a condenser and an easy one for a low charge to hide in — the ice on the pipe tells you before the phone rings, if you know to look.",
+    watchFor: "Rooftop units in direct sun with no shade and no isolators, long pipe runs that were never evacuated, and coils washed only when the phone stops ringing.",
+    services: ["ac-service", "ac-repair", "ac-install"],
+    access: "On a May or June afternoon, the honest slot is before 11 am or after 7 pm — we would rather tell you that than be three hours late.",
+    faqs: [
+      { question: "Is a shade over the outdoor unit worth it?", answer: "In Malir, yes. A simple shade or a slatted screen on the sun side keeps the condenser's inlet air several degrees cooler, which shows up directly in the pressure and the units consumed. It has to leave the coil's airflow alone — a box that traps the hot air is worse than no shade at all." },
+      { question: "Ice is forming on the copper pipe. Is that serious?", answer: "It is a symptom, not a fault of its own: either the air is not moving across the coil (filters, blower, a choked indoor coil) or the charge is low. Switch to fan-only to melt it, do not chip it off, and get it looked at — running an inverter on a low charge is how a compressor dies quietly over two seasons." },
+      { question: "Do you cover new housing societies on the Malir side?", answer: "Yes, including the plots and row houses coming up towards the airport. New builds are mostly installation work here — brackets, sleeves, pipe runs and an evacuation that most painters skip — and the odd unit that has been running on a line nobody vacuumed." },
+    ],
+    nearby: ["north-nazimabad", "dha", "saddar-shahrah"],
+  },
+  {
+    slug: "saddar-shahrah",
+    name: "Saddar",
+    label: "Saddar, Shahrah-e-Faisal & the commercial belt",
+    blocks: "Saddar, I.I. Chundrigar Road, Bahadurabad, Kalabat Market",
+    eta: "15–30 min from the workshop door",
+    intro: "Shops, clinics, offices and restaurants, running on ceiling cassettes and rooftop packages from opening to close. Commercial work here is rarely about one broken unit: it is about a filter nobody has seen in two years, a drain that was never routed, or one zone freezing while the one next to it sweats.",
+    watchFor: "Cassettes with a blocked condensate pump, ducted returns sealed against a wall that sweats, and AMCs signed but never actually visited in March.",
+    services: ["ac-ducted", "ac-service", "ac-inverter"],
+    access: "We work around trade hours as a rule — before opening, after close, or between lunch and dinner on a weekend, with a per-unit report your manager can keep.",
+    faqs: [
+      { question: "Can you service a shop without closing it?", answer: "Usually yes. Indoor coil work needs the space empty of customers for about twenty minutes, and we schedule that around your quietest hour. A rooftop package or a cassette in a false ceiling can often be done with the shutters open and dust sheeting down." },
+      { question: "What does an annual maintenance contract actually include?", answer: "Two visits a year, one in March before the season, with filters, coils, drain, belts, terminations and a current reading logged per unit, plus priority call-out for contract holders and a written report per unit. What it does not include is parts, and we would rather say that on the paper than argue about it in June." },
+      { question: "One office is freezing and the next one is hot. Same system?", answer: "Often yes, and it is usually air routing rather than capacity — a damper left shut, a filter sealing one branch, or a return drawing from the wrong space. We survey the runs and show you where the air is actually going before anyone buys another unit." },
+    ],
+    nearby: ["clifton", "north-nazimabad", "malir"],
+  },
+] as const;
+
 /** Job-site photography for the work gallery. */
 export const projects = [
   { image: "/images/work-van.jpg", alt: "Freeze Point service pickup staged for a Karachi call-out", caption: "Clifton · morning call-out" },

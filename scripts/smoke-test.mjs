@@ -576,6 +576,89 @@ try {
   ok("prefers-reduced-motion: content visible, animation off");
   await page.emulateMedia({ reducedMotion: "no-preference" });
 
+  // ── Area pages ───────────────────────────────────────────────────────────
+  // The locality pages are generated from serviceAreas, so the check is that they
+  // exist, are linked from the home page, carry valid structured data, and hand the
+  // visitor back to the one booking dialog — with the area already filled in.
+  await page.setViewportSize({ width: 1456, height: 900 });
+  await page.goto(baseURL, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(300);
+  const stripLinks = await page.locator(".home-areas a").evaluateAll((els) => els.map((el) => el.getAttribute("href")));
+  assert.ok(stripLinks.length >= 7, `the home page links ${stripLinks.length} areas, expected the list plus "All areas"`);
+  assert.equal(new Set(stripLinks).size, stripLinks.length, "the areas strip on the home page repeats a link");
+  ok(`Home page links every area page (${stripLinks.length} links, no duplicates)`);
+
+  await page.goto(`${baseURL}/areas`, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(250);
+  const areasIndex = await page.evaluate(() => ({
+    cards: document.querySelectorAll(".area-card").length,
+    hrefs: [...document.querySelectorAll(".area-card")].map((el) => el.getAttribute("href")),
+    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    title: document.title,
+  }));
+  assert.match(areasIndex.title, /^AC repair areas in Karachi/);
+  assert.ok(areasIndex.cards >= 6, `/areas shows ${areasIndex.cards} cards, expected 6`);
+  assert.equal(areasIndex.overflow, 0, "/areas overflows horizontally");
+  ok(`/areas lists ${areasIndex.cards} areas, no overflow`);
+
+  await page.goto(`${baseURL}/areas/clifton`, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(250);
+  const clifton = await page.evaluate(() => {
+    const json = [...document.querySelectorAll('script[type="application/ld+json"]')].map((el) => {
+      try { return JSON.parse(el.textContent ?? ""); } catch { return { broken: true }; }
+    });
+    const graph = json.flatMap((entry) => entry["@graph"] ?? [entry]).map((entry) => entry["@type"]);
+    return {
+      h1: document.querySelector("h1")?.innerText ?? "",
+      canonical: document.querySelector('link[rel="canonical"]')?.getAttribute("href") ?? "",
+      faq: document.querySelectorAll(".area-faq details").length,
+      nearby: [...document.querySelectorAll(".area-nearby-link")].map((el) => el.getAttribute("href")),
+      graph,
+      broken: json.some((entry) => entry.broken),
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      ogImage: document.querySelector('meta[property="og:image"]')?.getAttribute("content") ?? "",
+    };
+  });
+  assert.match(clifton.h1, /Clifton/);
+  assert.ok(clifton.canonical.endsWith("/areas/clifton"), `canonical is ${clifton.canonical}`);
+  assert.equal(clifton.broken, false, "the JSON-LD on the area page is not parseable");
+  for (const type of ["Service", "FAQPage", "BreadcrumbList"]) {
+    assert.ok(clifton.graph.includes(type), `area page schema is missing ${type} — got ${clifton.graph.join(", ")}`);
+  }
+  assert.ok(clifton.faq >= 3, `only ${clifton.faq} questions on the area page`);
+  assert.equal(clifton.overflow, 0, "the area page overflows horizontally");
+  assert.match(clifton.ogImage, /og\.jpg$/, `og:image is ${clifton.ogImage}`);
+  for (const href of clifton.nearby) assert.ok(href === "/areas" || /^\/areas\/[a-z-]+$/.test(href ?? ""), `odd cross-link ${href}`);
+  await page.screenshot({ path: "artifacts/area-clifton.png" });
+  ok(`Area page: ${clifton.faq} local questions, schema (${clifton.graph.filter((t) => t !== "LocalBusiness").join("+")}), ${clifton.nearby.length} cross-links, og:image`);
+
+  await page.goto(`${baseURL}/areas/north-nazimabad`, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(200);
+  await page.locator(".sub-hero-actions a.button-primary, .sub-hero-actions a").first().click();
+  await page.waitForTimeout(600);
+  const handoff = await page.evaluate(() => {
+    const area = document.getElementById("booking-area");
+    return {
+      dialog: Boolean(document.querySelector(".modal")),
+      url: location.pathname + location.search,
+      area: area ? area.value : null,
+      step1: Boolean(document.querySelector("#booking-area")),
+    };
+  });
+  assert.equal(handoff.dialog, true, "the area page's CTA did not open the booking dialog");
+  assert.equal(handoff.url, "/", `the handoff did not land on the home page — it is at ${handoff.url}`);
+  assert.equal(handoff.step1, true, "the dialog did not open on the details step");
+  assert.match(handoff.area ?? "", /^North Nazimabad$/, `the area was not prefilled — field holds ${JSON.stringify(handoff.area)}`);
+  ok(`Area CTA hands over to the one booking dialog with the area prefilled ("${handoff.area}")`);
+
+  const unknown = await page.request.get(`${baseURL}/areas/nowhere-land`);
+  assert.equal(unknown.status(), 404, `an unknown area returned ${unknown.status()} instead of 404`);
+  const sitemap = await (await page.request.get(`${baseURL}/sitemap.xml`)).text();
+  const inSitemap = ["/areas", ...["clifton", "dha", "gulshan-e-iqbal", "north-nazimabad", "malir", "saddar-shahrah"].map((slug) => `/areas/${slug}`)];
+  const missing = inSitemap.filter((href) => !sitemap.includes(href));
+  assert.equal(missing.length, 0, `sitemap is missing ${missing.join(", ")}`);
+  ok(`Unknown area 404s, and all 7 area URLs are in sitemap.xml`);
+
   assert.deepEqual(failedRequests, [], `failed network requests: ${failedRequests.join(", ")}`);
   assert.deepEqual(errors, [], `client errors: ${errors.join(", ")}`);
   ok("Zero failed requests and zero client errors");

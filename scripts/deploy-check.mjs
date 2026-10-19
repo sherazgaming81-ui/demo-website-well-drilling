@@ -49,6 +49,18 @@ for (const path of [...fonts, ...icons, manifestHref, "/robots.txt", "/sitemap.x
   const res = await fetch(base + path, { method: "GET" });
   check(`asset ${path}`, res.status === 200, String(res.status));
 }
+// The area pages are generated from src/lib/site-data.ts, so the deploy is the
+// moment they either exist or do not: each URL must answer, carry its own title,
+// and keep the share image a page-level openGraph block can so easily drop.
+for (const [href, needle] of [["/areas", "Six parts of"], ["/areas/clifton", "AC repair in Clifton"], ["/areas/malir", "AC repair in Malir"]]) {
+  const res = await fetch(base + href);
+  const body = await res.text();
+  const hasOg = /property="og:image" content="[^"]*\/og\.jpg"/.test(body);
+  check(`deployed page ${href}`, res.status === 200 && body.includes(needle) && hasOg, `${res.status}, "${needle}" ${body.includes(needle) ? "found" : "missing"}, og:image ${hasOg ? "set" : "MISSING"}`);
+}
+const missingPage = await fetch(`${base}/areas/a-place-that-does-not-exist`);
+check("unknown area page 404s", missingPage.status === 404, String(missingPage.status));
+
 check("every photo on the page is referenced", assets.length >= 7, `${assets.length} distinct photos`);
 
 // The precise regression: absolutely positioned next/image pixels must stay

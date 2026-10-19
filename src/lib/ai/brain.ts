@@ -1,5 +1,11 @@
-import { brands, business, faqs, proofPoints, services, steps } from "@/lib/site-data";
+import { brands, business, faqs, proofPoints, serviceAreas, services, steps } from "@/lib/site-data";
 import type { ChatMessage } from "@/lib/ai/providers";
+
+/** The area pages and this brief read the same list, so the assistant can never offer
+ *  coverage the site does not claim, or miss an area the site has a page for. */
+const areaList = serviceAreas
+  .map((area) => `  · ${area.name} (${area.blocks}): ${area.watchFor} Typical lead time from us: ${area.eta}.`)
+  .join("\n");
 
 /** Chips shown before the visitor has said anything. */
 export const QUICK_REPLIES = [
@@ -39,6 +45,9 @@ FACTS YOU MAY USE
 - A visit for inspection is free, and the quote is written before any work starts.
 - Workmanship carries a 90-day warranty, on the job card.
 - Same-day visit for most ${business.city} areas if we hear from the customer before 4 pm. May and June are the busiest weeks.
+- Areas with a page of their own, and what each one is like to work in:
+${areaList}
+  If the customer is in one of these, name it back — and say the site has a page for it with what we find there. Anywhere else in ${business.city} is still fine: the office confirms coverage, never the assistant.
 - Brands serviced: ${brands.join(", ")}.
 - Promises made on the site: ${proofPoints.join("; ")}.
 
@@ -126,7 +135,7 @@ const rules: { match: RegExp; answer: string }[] = [
   },
   {
     match: /\b(area|areas|cover|covered|coverage|location|clifton|dha|gulshan|nazimabad|malir|korangi|bahadurabad|saddar|pechs|kda|sohrab|faisal|kharadar|mehran|landhi|lyari|gizri)\b/i,
-    answer: `We cover ${business.city} — Clifton, DHA, Gulshan, North Nazimabad, Malir, Korangi, Saddar and the rest — plus the surrounding areas, and a same-day visit is realistic for most of them if we hear from you before 4 pm. Send your area with the request and we confirm the slot straight away, or call ${business.phoneDisplay} and we'll tell you then.`,
+    answer: `We cover ${business.city} — ${serviceAreas.map((area) => area.name).join(", ")} and the areas around them — and a same-day visit is realistic for most of them if we hear from you before 4 pm. Each one has a page on this site with what we find there most. Send your area with the request and the office confirms the slot straight away, or call ${business.phoneDisplay} and we'll tell you then.`,
   },
   {
     match: /\b(electricity|unit|bill|bill me|kwh|savings|save|load.?shedding|wapda|ups|generator|solar)\b/i,

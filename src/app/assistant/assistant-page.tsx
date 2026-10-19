@@ -28,7 +28,7 @@ export function AssistantPage() {
           <div>
             <h1>Ask the assistant</h1>
             <p>
-              Wells, pumps, permits, coverage — or just say &ldquo;book&rdquo; and it will take your estimate request here. Prefer a person?{" "}
+              Faults, gas, jet cleaning, inverter boards, new installs — or just say &ldquo;book&rdquo; and it will take your inspection request here. Prefer a person?{" "}
               <a href={business.phoneHref}>{business.phoneDisplay}</a>.
             </p>
           </div>

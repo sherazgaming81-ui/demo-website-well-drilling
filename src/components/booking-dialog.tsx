@@ -6,9 +6,10 @@ import { Icon } from "@/components/icons";
 import { bookingServices, business } from "@/lib/site-data";
 import { dateBounds, formatDate, validateBooking, type BookingErrors, type BookingFields } from "@/lib/booking";
 
-export function BookingDialog({ initialService = "", onClose }: { initialService?: string; onClose: () => void }) {
+export function BookingDialog({ initialService = "", initialArea = "", onClose }: { initialService?: string; initialArea?: string; onClose: () => void }) {
   const [step, setStep] = useState(1);
-  const [fields, setFields] = useState<BookingFields>({ service: initialService, area: "", preferredDate: "", timePreference: "flexible", fullName: "", email: "", phone: "", notes: "", consent: false, website: "", requestId: "" });
+  /* initialArea is what an area page hands over, so nobody types their own locality twice. */
+  const [fields, setFields] = useState<BookingFields>({ service: initialService, area: initialArea, preferredDate: "", timePreference: "flexible", fullName: "", email: "", phone: "", notes: "", consent: false, website: "", requestId: "" });
   const [errors, setErrors] = useState<BookingErrors>({});
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
