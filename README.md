@@ -33,7 +33,8 @@ Design and motion live in `src/app/globals.css`:
 
 ## Assistant
 
-- `POST /api/chat` streams SSE and tries each model in the list in order. If the whole chain fails
+- `POST /api/chat` streams SSE against the model in `DAHL_MODEL` (one model, the one the owner named — a
+  fallback that rambles is worse than a retry, and the free tier's congestion made that concrete). If it fails
   — or no key is set — it answers **503 with one honest sentence** and the number to call, because a
   scripted "knowledge base" reply is a guess wearing a brand's name. The visitor is never stranded:
   the phone number and the inspection form are one tap away in the panel
@@ -57,6 +58,9 @@ Design and motion live in `src/app/globals.css`:
   reload offers the last message back on a *Recent message* card instead of dumping a half-finished
   booking on the floor. Nothing is sent by it, it dies with the tab, and `Start a new chat` clears
   it; the privacy dialog says exactly this
+- a reply that turns out to be the model talking to itself ("I should keep this brief…") is dropped and
+  replaced with an honest one-liner — `sanitize.ts` judges the head, every line and every sentence of the
+  answer, and keeps real replies that merely start with "I will check the capacitor first"
 - the guided booking is a deterministic ten-step flow (`src/lib/ai/booking-flow.ts`): no model parses a phone number or a date, each answer is checked with the same `validateBooking()` the form uses, and the whole request is read back for confirmation before it is sent
 - `src/lib/ai/sanitize.ts` is the safety net: an invented price or a narration of the model's reasoning never reaches a visitor, and markdown is flattened because the bubble is plain text
 - requests carry `chat_template_kwargs: { thinking: false }`, verified against the gateway to suppress the `reasoning` field entirely
@@ -109,7 +113,8 @@ npm run check:deploy                                   # against a deployed URL
 node scripts/make-og.mjs                                 # rebuilds public/og.jpg from site-data + real fonts
 ```
 
-`smoke-test.mjs` (39 checks) walks the journey in Chromium: every image must decode with no 404, the marquee and contour motion must run, an estimate must complete through the chat UI and return an `FP-########` reference, the desktop panel must hold still through a long reply and a stage change and must not clip its own composer at 720/660/600/540px of height, the greeting must not invent a history and the option menu must resize / download / clear for real, ten widths from 1600px to 320px must show no overflow and no clipped text, phones must get no decorative loops, `prefers-reduced-motion` must show everything with animation off, and the run must end with zero console errors and zero failed requests.
+`smoke-test.mjs` (41 checks) walks the journey in Chromium: every image must decode with no 404, the marquee and contour motion must run, an estimate must complete through the chat UI and return an `FP-########` reference, the desktop panel must hold still through a long reply and a stage change and must not clip its own composer at 720/660/600/540px of height, the greeting must not invent a history, the option menu must resize / download / clear for real,
+  and a real answer must come back short, list-free and in the language the question was asked in, ten widths from 1600px to 320px must show no overflow and no clipped text, phones must get no decorative loops, `prefers-reduced-motion` must show everything with animation off, and the run must end with zero console errors and zero failed requests.
 
 `scripts/make-og.mjs` renders the 1200x630 share card in Chromium from the same `site-data.ts` (it asserts the two web fonts and
 both images actually loaded, because a silently-fallback OG card is exactly the kind of thing that ships broken), then downsamples

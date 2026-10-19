@@ -28,9 +28,49 @@ export type Sanitized = { text: string; changed: boolean; violations: string[] }
    block matcher cannot see it. Anything along these lines at the head of a reply is
    the model talking to itself, never something a customer should read, so it comes
    off line by line until a real sentence starts. */
-const PLAN_LEAD = /^[ \t]*(?:\d{1,2}[.)]\s*)?(?:\*\*)?(?:my (?:role|task|goal|job|approach|plan)|i (?:need|have|must|should|will|’ll|'ll)\b|let me\b|first[,\s]|actually[,\s]|okay[,\s]|so,? i\b|the (?:user|customer) (?:is asking|wants|needs)|i(?:’ll|'ll) (?:answer|respond|say|start))\b/i;
+const PLAN_LEAD = /^[ \t]*(?:\d{1,2}[.)]\s*)?(?:\*\*)?(?:my (?:role|task|goal|job|approach|plan)|let me\b|however[,\s]+i\b|but\s+i\s+(?:need|should|must|will)\b|so,?\s*i\s+(?:need|should|must|will|’ll|'ll)|therefore,?\s*i\b|note that i\b|given that i\b|i (?:need|have|must|should|’ll|'ll|am going to) (?:to\s+)?(?:answer|respond|reply|say|start|keep|stay|follow|mention|avoid|be)\b|i (?:must|need to) (?:stay|keep|follow)\b|stay in (?:character|role)|as (?:the|an|a) (?:assistant|helper|website|chatbot)|the (?:instructions|system prompt|rules|brief) (?:say|tell|state|require)|the (?:user|customer) (?:is asking|wants|needs)|first[,\s]+i\b|second[,\s]+i\b|next[,\s]i\b|now[,\s]i\b|actually[,\s]+i\b)[^\n]*\n?/i;
+/* A line like "I should do this:" or "Plan:" is a heading the model wrote for
+   itself. Only short ones count, so a real sentence that happens to start with
+   "I will" is never mistaken for it. */
+const PLAN_HEADER = /^[ \t]*(?:\*\*)?[ \t]*[^\n]{0,72}:[ \t]*(?:\*\*)?[ \t]*$/;
+
+/* The worst shape the gateway has produced: the entire reply is the model's own
+   checklist, written on one line after "I should:". Nothing in it belongs to a
+   customer, and cutting the lead line would leave a numbered plan behind, so the
+   whole reply is dropped and the caller substitutes an honest failure line. */
+const PLAN_AS_REPLY = /^[ \t]*(?:\*\*)?i (?:should|need to|need|must|have to|am going to)\b[^\n]{0,60}:(?:[^\n]*\s\d{1,2}[.)][^\n]*)+$/i;
+
+/* Enumerating the verbs a model uses while talking about its own answer never ends, so
+   the rule is semantic instead: an opening that is first person about what the reply
+   will do ("I should give a brief answer", "I'll keep this short") plus vocabulary that
+   only appears in that kind of sentence. A real answer to a customer does not describe
+   its own length, tone or formatting. */
+const META_OPEN = /^[ \t]*(?:\*\*)?[ \t]*(?:so[,\s]+|well[,\s]+|however[,\s]+)?i (?:should|need to|need|must|have to|\u2019ll|'ll|will|am going to|’m going to)\b/i;
+const ABOUT_THE_ANSWER = /\b(?:answer|reply|respond|response|sentence|paragraph|brief|short|length|tone|format|markdown|bullet|emoji|emojis|character|role|instructions?|policy|guideline|constraint)\b/i;
+
+export function readsAsNarration(text: string): boolean {
+  const first = text.trim();
+  if (!META_OPEN.test(first)) return false;
+  if (first.split(/\s+/).length > 90) return false;
+  return ABOUT_THE_ANSWER.test(first);
+}
+
+/* MiniMax-style replies put the thinking in the answer channel *between* real
+   sentences, so a head-only strip is not enough. Each sentence is judged on its own:
+   a sentence about how the reply should be written, or about the request being off
+   topic, is the model talking to itself and never belongs in front of a customer. */
+const META_SENTENCE = /(?:\bi (?:should|need to|need|must|have to|am going to|will|\u2019ll|'ll)\b[^.!?]{0,80}\b(?:answer|respond|reply|say|start|keep|stay|follow|mention|avoid|be|produce|give|format|stick|note)\b)|(?:\bthis (?:request|question|prompt) (?:doesn'?t|does not|don'?t) (?:seem )?to be about\b)|(?:\bit'?s asking me to\b)|(?:\bmy (?:role|task|job|instructions?|guidelines?)\b)|(?:\bas (?:an?|the) (?:ai|assistant|helper|chatbot)\b)|(?:\bstay in (?:character|role)\b)|(?:\bthe (?:system )?(?:instructions|rules|brief|policy) (?:say|tell|state|require|forbid)\b)/i;
+
+function stripNarrationSentences(text: string): { text: string; hit: boolean } {
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  if (sentences.length < 2) return { text, hit: false };
+  const kept = sentences.filter((sentence) => !META_SENTENCE.test(sentence));
+  if (kept.length === sentences.length) return { text, hit: false };
+  return { text: kept.join(" ").trim(), hit: true };
+}
 
 function stripPlanNarration(text: string): { text: string; hit: boolean } {
+  if (PLAN_AS_REPLY.test(text.trim()) || readsAsNarration(text)) return { text: "", hit: true };
   const lines = text.split("\n");
   let index = 0;
   while (index < lines.length) {
@@ -40,7 +80,7 @@ function stripPlanNarration(text: string): { text: string; hit: boolean } {
       continue;
     }
     const numbered = /^\d{1,2}[.)]\s/.test(line);
-    if (!numbered && !PLAN_LEAD.test(line)) break;
+    if (!numbered && !PLAN_LEAD.test(line) && !PLAN_HEADER.test(line)) break;
     index++;
   }
   const kept = lines.slice(index).join("\n").trim();
@@ -108,10 +148,14 @@ export function sanitizeAnswer(raw: string): Sanitized {
 
   const planned = stripPlanNarration(text);
   if (planned.hit) violations.push("internal plan removed");
-  const scrubbed = scrubPrices(flatten(planned.text));
+  const spoken = stripNarrationSentences(planned.text);
+  if (spoken.hit) violations.push("model narration removed");
+  const scrubbed = scrubPrices(flatten(spoken.text));
   if (scrubbed.hit) violations.push("price figure removed");
 
-  const cleaned = scrubbed.text.trim() || SAFE_COST_LINE;
+  // a deleted price leaves a hole that needs the standard cost sentence; a reply that
+  // was nothing but narration leaves nothing to answer with, and the caller says so
+  const cleaned = scrubbed.text.trim() || (scrubbed.hit ? SAFE_COST_LINE : "");
   return { text: cleaned, changed: cleaned !== raw.trim(), violations };
 }
 

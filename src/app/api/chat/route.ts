@@ -3,7 +3,7 @@ import { business } from "@/lib/site-data";
 import { buildMessages } from "@/lib/ai/brain";
 import { openingStep, stepFlow, wantsToBook, type FlowSession } from "@/lib/ai/booking-flow";
 import { fetchCompletion, readStream, resolveAttempts, type Attempt } from "@/lib/ai/providers";
-import { createThinkScrubber, sanitizeAnswer } from "@/lib/ai/sanitize";
+import { createThinkScrubber, readsAsNarration, sanitizeAnswer } from "@/lib/ai/sanitize";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -301,13 +301,22 @@ export async function POST(request: NextRequest) {
             // the bubble with a version that never shows a figure or a thought trail.
             const clean = sanitizeAnswer(streamed);
             if (clean.changed) {
-              streamController.enqueue(event({ type: "replace", text: clean.text }));
+              // Stripping a price or a thought trail can leave nothing behind, and the
+              // widget ignores an empty replace — which would leave the narration on
+              // screen. So when nothing honest remains, say so instead.
+              const shown = clean.text.trim().length >= 24 ? clean.text : UNSAID;
+              streamController.enqueue(event({ type: "replace", text: shown }));
               console.warn(`[chat] sanitised ${attempt.model}: ${clean.violations.join(", ") || "formatting"}`);
             }
             streamController.enqueue(event({ type: "done", fallback: false }));
           } catch (error) {
-            // The provider died mid-answer. Keep whatever was already streamed
-            // and close cleanly — the widget shows the partial reply plus a note.
+            // The provider died mid-answer. Keep whatever was already streamed and
+            // close cleanly — the widget shows the partial reply plus a note — unless
+            // what got out before the break is nothing but the model's own narration,
+            // in which case the honest line replaces it rather than staying on screen.
+            if (readsAsNarration(streamed) || sanitizeAnswer(streamed).text.trim().length < 24) {
+              streamController.enqueue(event({ type: "replace", text: UNSAID }));
+            }
             streamController.enqueue(
               event({ type: "error", message: "The answer was interrupted." }),
             );
@@ -343,6 +352,10 @@ export async function POST(request: NextRequest) {
  * plainly, given the number, and left one tap away from the form, so an outage is an
  * outage and not a bot pretending to know things.
  */
+/** When a reply turns out to be nothing but the model talking to itself, this is what
+ *  the bubble says instead — short, Hinglish, honest about the failure. */
+const UNSAID = `Is baar jawab tayyar nahi ho saka — dobara poochein, ya office ko ${business.phoneDisplay} par call kar dein. Wahi details le kar aage badha denge.`;
+
 function unavailable(): Response {
   return Response.json(
     {
