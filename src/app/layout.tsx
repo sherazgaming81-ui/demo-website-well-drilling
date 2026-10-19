@@ -42,7 +42,7 @@ export const metadata: Metadata = {
   category: "air conditioning services",
 };
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#f8f9f6" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#f5f9fc" };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

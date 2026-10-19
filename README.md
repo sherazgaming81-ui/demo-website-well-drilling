@@ -22,8 +22,14 @@ That one file also feeds the assistant: the system brief and the offline answers
 Design and motion live in `src/app/globals.css`:
 - tokens at the top (`--paper`, `--ink`, `--blue`, `--navy`, `--frost`, `--amber`, `--line`)
 - fonts are self-hosted variable woff2, subset to the ranges used (`public/fonts/`, SIL OFL; `freeze-urdu.woff2` carries the one Urdu line)
-- the mark is `src/app/icon.svg`, used as the favicon *and* rendered in the header/footer, so they cannot drift
-- **motion policy**: decorative loops (contour rings, hero breathe, frost sweep, marquee, logo turn) run on pointer-fine devices only and are off under `prefers-reduced-motion`; meaningful motion (scroll reveals) stays everywhere
+- the header carries the logo (`public/logo.webp`, 58px tall on desktop, shrinking at 1180px and 850px, and
+  swapped for the square mark under 760px). The mark (`public/mark.webp`) is what the favicon set reuses, and it
+  is cut from the logo itself - a 248px square window taken out of the plaque, centred on the snowflake, ending
+  6px before the first letter of the wordmark, so no pixel is redrawn and no glyph is sliced. Favicon tiles are
+  full-bleed squares (16/32/48/64 `src/app/favicon.ico` + `icon.png`, 180 `apple-icon.png`, 192/512
+  `public/icons/`): no rounded corners, because a transparent corner paints white in a light tab. The in-site
+  mark keeps the tile's rounding instead, where paper shows through it
+- **motion policy**: decorative loops (contour rings, hero breathe, frost sweep, marquee) run on pointer-fine devices only and are off under `prefers-reduced-motion`; meaningful motion (scroll reveals) stays everywhere
 
 ## Assistant
 
