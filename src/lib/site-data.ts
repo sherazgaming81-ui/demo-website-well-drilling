@@ -4,7 +4,7 @@
  * This is a demonstration brand built to show a client what their own site could
  * look like: the phone numbers, address and figures here are illustrative, not a
  * real company's. Change this one file and the page, the estimate form, the chat
- * assistant's brief and its offline answers all follow together — that is deliberate,
+ * assistant's brief follows it too — that is deliberate,
  * so the assistant can never tell a visitor something the page disagrees with.
  */
 export const business = {

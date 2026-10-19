@@ -306,7 +306,16 @@ try {
   assert.equal(malformed.status(), 400);
   const health = await page.request.get("/api/health");
   assert.equal(health.status(), 200);
-  ok("API validation, origin protection, idempotency, and healthy status");
+  // The status endpoint used to advertise an "offline knowledge base" that the chat
+  // now refuses to have. A health check that lies is worse than no health check, so the
+  // vocabulary is pinned: live, or unavailable. Nothing else.
+  const healthBody = await health.json();
+  assert.ok(
+    ["live", "unavailable"].includes(healthBody?.assistant?.mode),
+    `/api/health claims assistant mode ${JSON.stringify(healthBody?.assistant?.mode)} — it must be "live" or "unavailable"`,
+  );
+  assert.equal(healthBody?.assistant?.mode, "live", "the test server has a key, so health must say live");
+  ok("API validation, origin protection, idempotency, and healthy status (health can only say live or unavailable)");
   await page.getByRole("button", { name: "Back to exploring" }).click();
 
   // Legal dialogs carry the real business language.

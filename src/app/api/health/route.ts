@@ -10,7 +10,9 @@ export async function GET() {
       ok: true,
       leads: forwarding ? "webhook + memory" : "memory only",
       assistant: {
-        mode: attempts.length ? "live" : "offline knowledge base",
+        // No scripted brain any more: without a key the chat answers 503, so say so here
+        // instead of claiming a fallback that no longer exists.
+        mode: attempts.length ? "live" : "unavailable",
         providers: [...new Set(attempts.map((attempt) => attempt.provider))],
       },
     },
