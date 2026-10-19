@@ -977,7 +977,7 @@ h1 > span { display: block; white-space: nowrap; }
    conversation and the greeting scroll now: head, actions, input and disclosure are
    told never to shrink, and `margin: auto 0` centres the greeting only while there
    is room for it — auto margins collapse instead of pushing content out of view. */
-.chat-head, .chat-actions, .chat-input, .chat-disclosure, .chat-starters { flex-shrink: 0; }
+.chat-head, .chat-actions, .chat-input, .chat-disclosure { flex-shrink: 0; }
 .chat-greet { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; padding: 22px 22px 10px; scrollbar-gutter: stable; scrollbar-width: thin; }
 .chat-greet-in { margin: auto 0; }
 .chat-greet-hi { font-size: 15px; color: var(--muted); font-weight: 550; }
@@ -992,10 +992,6 @@ h1 > span { display: block; white-space: nowrap; }
 .chat-recent-line { font-size: 12.5px; line-height: 1.6; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .chat-recent-go { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 650; color: var(--blue); }
 
-.chat-starters { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; padding: 16px 22px 18px; }
-.chat-starters button { border: 1px solid #ccd8e6; background: white; color: var(--ink); font-size: 12.5px; font-weight: 600; line-height: 1.45; padding: 12px 13px; border-radius: 999px; transition: border-color .2s, color .2s, background .2s, transform .2s; }
-.chat-starters button:hover:not(:disabled) { border-color: var(--blue); color: var(--blue-dark); background: #eef7fd; transform: translateY(-1px); }
-.chat-starters button:disabled { opacity: .5; cursor: wait; }
 
 .chat-log { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 16px 16px 10px; display: flex; flex-direction: column; gap: 10px; background: #fbfdfe; scrollbar-gutter: stable; scrollbar-width: thin; }
 .chat-row { display: flex; }
@@ -1061,14 +1057,13 @@ h1 > span { display: block; white-space: nowrap; }
   .chat-launcher-label { display: none; }
   .chat-panel { right: 0; left: 0; bottom: 0; width: 100%; max-height: calc(100dvh - 8px); border-radius: 20px 20px 0 0; border-bottom: 0; }
   .chat-greet { padding: 22px 18px 6px; }
-  .chat-starters { grid-template-columns: 1fr; padding: 12px 18px 16px; }
   .chat-actions { flex-direction: column; align-items: stretch; gap: 9px; }
   .chat-actions .chat-book { width: 100%; }
   .chat-call { justify-content: center; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chat-launcher, .chat-launcher.is-nudging, .chat-panel, .chat-actions .chat-book.is-highlighted, .chat-typing i, .chat-starters button { animation: none !important; transition: none !important; }
+  .chat-launcher, .chat-launcher.is-nudging, .chat-panel, .chat-actions .chat-book.is-highlighted, .chat-typing i { animation: none !important; transition: none !important; }
 }
 
 /* ── Site assistant: desktop comfort pass ─────────────────────────────
@@ -1098,8 +1093,6 @@ h1 > span { display: block; white-space: nowrap; }
   .chat-greet h2 { font-size: 32px; }
   .chat-greet-sub { font-size: 14px; max-width: 460px; }
   .chat-recent { padding: 16px 18px; }
-  .chat-starters { padding: 18px 30px 22px; gap: 11px; }
-  .chat-starters button { font-size: 13px; padding: 14px 16px; }
   .chat-log { padding: 20px 24px 14px; gap: 14px; }
   .chat-bubble { max-width: 100%; padding: 13px 17px; font-size: 15px; line-height: 1.75; border-radius: 17px; }
   .chat-say { max-width: 78%; }

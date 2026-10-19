@@ -43,7 +43,8 @@ Design and motion live in `src/app/globals.css`:
 - **one surface**: the floating box on the home page. There used to be a `/assistant` page for
   long answers; it is gone, and `Expand window` in the panel's ⋯ menu does that job in place —
   one widget, so behaviour and validation cannot exist in two versions
-- the panel opens on a greeting (*Hi there 👋 / How can we help?*) with four starters, then the
+- the panel opens on a greeting (*Hi there 👋 / How can we help?*), one line of what to ask and
+  **no** suggested-question buttons — a chat that opens with four prompts reads like a menu. Then the
   transcript: bubbles with a `Freeze Point · AI assistant · just now` line under each answer, a
   searchable emoji picker (groups, colour-emoji font, and a *Frequently used* row only once the
   visitor has earned it by using one), and deliberately **no** attachment or voice control — a

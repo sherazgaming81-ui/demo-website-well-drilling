@@ -33,13 +33,6 @@ const EMOJI_STORE_KEY = "freezepoint.emoji.v1";
  *  and this is a tab-local note, not an archive. */
 const KEEP_TURNS = 14;
 
-const STARTERS = [
-  "My AC runs but is not cooling",
-  "Gas leak ho gaya? Kya karun?",
-  "Service kab karwai jaye?",
-  "Book a free inspection",
-] as const;
-
 /**
  * The picker's alphabet, spelled in code points on purpose: emoji pasted into a source
  * file can survive as blank boxes, and a blank button in a picker is exactly the dead
@@ -552,8 +545,7 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
               <p className="chat-greet-hi">Hi there <span aria-hidden="true">👋</span></p>
               <h2>How can we help?</h2>
               <p className="chat-greet-sub">
-                Not cooling, gas, noise, a smell, a service due or a new unit — ask in English or Roman Urdu. Say <em>book</em> and
-                I will take your inspection request right here.
+                AC ka fault, gas, service ya naya unit — jo poochna hai poochhein. Booking ke liye bas <em>book</em> likh dein.
               </p>
               {recentLine && (
                 <button type="button" className="chat-recent" onClick={() => { setTurns(saved?.turns ?? []); setMenu("none"); }}>
@@ -609,16 +601,6 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
                   </a>
                 </div>
               )}
-            </div>
-          )}
-
-          {greeting && (
-            <div className="chat-starters" aria-label="Common questions">
-              {STARTERS.map((chip) => (
-                <button key={chip} type="button" onClick={() => send(chip)} disabled={busy}>
-                  {chip}
-                </button>
-              ))}
             </div>
           )}
 

@@ -97,14 +97,17 @@ try {
   assert.match(chrome, /Freeze Point Assistant/);
   ok("Assistant chrome is fully on-niche (title, greeting, placeholder)");
 
-  // The greeting screen: what it says, the four starters, and the option menu —
-  // each item of the menu has to actually do something, so each is measured.
+  // The greeting screen: what it says, that it says nothing *else* (the option
+  // buttons were removed — a chat that opens with four prompts looks like a menu,
+  // not a conversation), and that each menu item actually does something.
   const greet = await page.evaluate(() => {
     const panel = document.querySelector(".chat-panel");
     return {
       lead: panel.querySelector(".chat-greet h2")?.innerText ?? "",
       hi: panel.querySelector(".chat-greet-hi")?.innerText ?? "",
-      starters: [...panel.querySelectorAll(".chat-starters button")].map((b) => b.innerText.trim()),
+      starters: panel.querySelectorAll(".chat-starters button").length,
+      buttons: [...panel.querySelectorAll("button")].map((b) => b.getAttribute("aria-label") || b.innerText.trim()),
+      sub: panel.querySelector(".chat-greet-sub")?.innerText ?? "",
       recent: Boolean(panel.querySelector(".chat-recent")),
       log: Boolean(panel.querySelector(".chat-log")),
       bubble: Boolean(panel.querySelector(".chat-row-assistant .chat-bubble")),
@@ -112,13 +115,20 @@ try {
   });
   assert.match(greet.lead, /How can we help\?/i);
   assert.match(greet.hi, /Hi there/);
-  assert.equal(greet.starters.length, 4, `expected 4 starter buttons, got ${greet.starters.length}`);
+  assert.match(greet.sub, /book/, `the greeting line does not tell the visitor how to book: ${JSON.stringify(greet.sub)}`);
+  assert.ok(greet.sub.split(/\s+/).length <= 24, `the greeting line is ${greet.sub.split(/\s+/).length} words long`);
   assert.equal(greet.recent, false, "a fresh visitor must not be shown a previous message they never had");
   assert.equal(greet.log, false, "the empty state should not render a transcript at all");
   assert.equal(greet.bubble, false, "the old greeting bubble came back — the screen replaced it");
-  const startersLive = await page.evaluate(() => [...document.querySelectorAll(".chat-starters button")].every((b) => !b.disabled));
-  assert.equal(startersLive, true, "a starter button is not clickable");
-  ok(`Greeting screen: "${greet.hi}" → "${greet.lead}" with 4 starters, no fake history, no leftover bubble`);
+  // the suggested-question buttons are gone: what is left is exactly the chrome a
+  // chat needs — header (options, close), one call-to-action, composer (emoji, send)
+  assert.equal(greet.starters, 0, `the greeting still shows ${greet.starters} suggested-question buttons`);
+  assert.deepEqual(
+    greet.buttons,
+    ["Chat options", "Close chat", "Use the inspection form", "Add an emoji", "Send your question"],
+    `the panel's controls are ${greet.buttons.join(" / ")}`,
+  );
+  ok(`Greeting screen: "${greet.hi}" → "${greet.lead}", one ${greet.sub.split(/\s+/).length}-word line, no prompt buttons, no fake history`);
 
   await page.getByRole("button", { name: "Chat options" }).click();
   const menu = await page.evaluate(() => [...document.querySelectorAll(".chat-menu [role='menuitem']")].map((b) => b.innerText.trim()));
@@ -165,7 +175,8 @@ try {
   assert.equal(picker.scrolls, true, "the picker does not scroll, so the lower groups are unreachable");
   // the group labels are upper-cased by CSS, so compare what the visitor reads, lower-cased
   const groups = picker.groups.map((label) => label.toLowerCase());
-  assert.ok(groups.length >= 4 && groups.includes("faces"), `groups read ${picker.groups.join(" / ")}`);
+  const namedGroups = groups.filter((label) => !label.includes("frequently used"));
+  assert.ok(namedGroups.length >= 5 && groups.includes("faces"), `groups read ${picker.groups.join(" / ")}`);
   assert.ok(!groups.includes("frequently used"), "a brand-new tab claimed a frequently-used row it has not earned");
   await page.getByRole("textbox", { name: "Search emoji by name" }).fill("snow");
   const searched = await page.evaluate(() => ({
@@ -191,7 +202,7 @@ try {
   assert.equal(afterEsc.emoji, false, "Escape did not close the emoji popover");
   assert.equal(afterEsc.panel, true, "Escape closed the whole panel from inside the popover");
   await page.getByRole("textbox", { name: "Your question" }).fill("");
-  ok(`Emoji picker: ${picker.count} named emoji in ${picker.groups.length - 1} groups, search works, scrolls, and the picked one earns its row`);
+  ok(`Emoji picker: ${picker.count} named emoji across ${namedGroups.length} groups, search works, it scrolls, and the picked one earns its row`);
 
   // No file picker and no microphone: the composer offers exactly one tool besides
   // sending, because that is all this chat can act on.
@@ -218,6 +229,62 @@ try {
   assert.equal(firstWords.tagLeak, false, "a model tag reached the visible chat");
   const metaLine = await page.evaluate(() => document.querySelector(".chat-row-assistant .chat-meta")?.innerText ?? "");
   assert.match(metaLine, /Freeze Point · AI assistant · (just now|\d+[mh] ago)/, `attribution line reads ${JSON.stringify(metaLine)}`);
+  // The brief now demands a short, Hinglish, un-formatted reply. Measured on a real
+  // answer, not trusted: a fresh Roman-Urdu question is asked and only the bubble that
+  // arrives after it is judged — word count, no list markers, no markdown, and the
+  // Roman-Urdu spine an English-only reply would not contain.
+  const askAnew = async (text) => {
+    const before = await page.locator(".chat-row-assistant .chat-bubble").count();
+    await page.getByRole("textbox", { name: "Your question" }).fill(text);
+    await page.getByRole("button", { name: "Send your question" }).click();
+    const settled = await page
+      .waitForFunction(
+        (count) =>
+          !document.querySelector(".chat-send.is-stop") &&
+          !document.querySelector(".chat-typing") &&
+          document.querySelectorAll(".chat-row-assistant .chat-bubble").length > count,
+        before,
+        { timeout: 90000 },
+      )
+      .then(() => true)
+      .catch(() => false);
+    const reply = await page.evaluate(() => {
+      const el = [...document.querySelectorAll(".chat-row-assistant .chat-bubble")].pop();
+      return {
+        text: (el?.textContent ?? "").trim(),
+        errored: Boolean(document.querySelector(".chat-row-assistant.is-error")),
+      };
+    });
+    return { settled, ...reply };
+  };
+  const HINGLISH_Q = "Meri split AC chalti hai lekin thanda nahi kar rahi, waja kya hai?";
+  let asked = await askAnew(HINGLISH_Q);
+  if (!asked.settled || asked.errored || asked.text.length < 12) {
+    await page.waitForTimeout(3000); // the gateway is metered; let the retry breathe
+    asked = await askAnew(HINGLISH_Q);
+  }
+  const gotAnswer = asked.settled && !asked.errored && asked.text.length > 12;
+  if (gotAnswer) {
+    const words = asked.text.split(/\s+/).filter(Boolean).length;
+    const listy = /^\s*(?:[-*\u2022]|\d+[.)])\s/m.test(asked.text);
+    const md = /\*\*|^#|\[.*\]\(/m.test(asked.text);
+    const hinglish = /\b(hai|hain|karega|karegi|nahin|nahi|zyada|mumkin|pehle|baat|masla|karwan|karwa|hogi|karein)\b/i.test(asked.text);
+    assert.ok(words <= 90, `the answer ran to ${words} words; the brief says two or three sentences, under 60`);
+    assert.equal(listy, false, `the answer came back as a list: ${asked.text}`);
+    assert.equal(md, false, `the answer leaked markdown into a plain-text bubble: ${asked.text}`);
+    assert.equal(hinglish, true, `a Roman-Urdu question got a non-Hinglish answer: ${asked.text}`);
+    ok(`Answer style: ${words} words, no list, no markdown, Hinglish back to a Hinglish question`);
+  } else {
+    // Skipped out loud: the model service refused to answer this run. What is still
+    // enforced is that a refusal stays honest — an error bubble, never a scripted
+    // answer — which is exactly what the 503 path exists for.
+    const note = await page.evaluate(
+      () => (document.querySelector(".chat-row-assistant.is-error .chat-bubble")?.textContent ?? "").trim(),
+    );
+    assert.ok(note.length > 20, `the chat went silent instead of failing honestly: ${JSON.stringify(asked)}`);
+    ok(`Answer style: SKIPPED (model saturated this run) — the failure was honest, not invented: "${note.slice(0, 56)}…"`);
+  }
+
   // an eaten leading character shows up as a lowercase or clipped start; model
   // phrasing itself is not what this guards
   assert.match(firstWords.head.trim(), /^[A-Z]/, `answer begins mid-word: ${firstWords.head}`);
