@@ -503,6 +503,51 @@ try {
   // phrasing itself is not what this guards
   assert.match(firstWords.head.trim(), /^[A-Z]/, `answer begins mid-word: ${firstWords.head}`);
   ok(`Streamed answer keeps its first character and shows no tags ("${firstWords.head.trim()}")`);
+
+  /* The complaint that came in from the owner: asking for the WhatsApp link produced a
+     bubble that argued with itself about a page tag and then restated the whole answer
+     under a "Final:" label. Both halves of that are checked here, on the rendered
+     bubble — plus the link itself, which has to arrive clickable, because a
+     "wa.me/923005550142" that the widget turns into a dial attempt is no better than
+     no answer at all. */
+  let wa = await askAnew("WhatsApp link do");
+  if (!wa.settled || wa.errored || wa.text.length < 12) {
+    await page.waitForTimeout(2500);
+    wa = await askAnew("Mujhe WhatsApp ka link chahiye");
+  }
+  const waShape = await page.evaluate(() => {
+    const el = [...document.querySelectorAll(".chat-row-assistant .chat-bubble")].pop();
+    const text = (el?.textContent ?? "").trim();
+    const links = [...(el?.querySelectorAll(".chat-link") ?? [])].map((a) => a.getAttribute("href") ?? "");
+    const sentences = text.split(/(?<=[.!?])\s+/).map((line) => line.trim().toLowerCase()).filter(Boolean);
+    return {
+      links,
+      labelled: /(?:^|[\s.!?])(?:final|actual|revised|corrected)(?:\s+(?:answer|reply))?\s*:/i.test(text),
+      plumbing: /\[\[|\]\]|\b(?:tokens?|sentinels?|emitted?|emitting|plumbing)\b/i.test(text),
+      debating: /(?:^|[\s.!?])\?+\s*(?:nahi|nahin|actually|wait|lekin|sorry)\b|(?:^|\s)(?:koi baat nahi|bas link|number hi kaafi)\b/i.test(text),
+      repeated: sentences.length > 1 && new Set(sentences).size !== sentences.length,
+      // only a reply wrapped in quotes — an answer may quote a button label honestly
+      quoted: /^["“”]|["“”]$/.test(text),
+      text,
+    };
+  });
+  if (wa.text.length > 12 && !honestFailure.test(wa.text)) {
+    assert.equal(waShape.labelled, false, `the answer shows a "Final:" seam: ${waShape.text.slice(0, 160)}`);
+    assert.equal(waShape.plumbing, false, `page plumbing leaked into the answer: ${waShape.text.slice(0, 160)}`);
+    assert.equal(waShape.debating, false, `the model argued with itself in front of the visitor: ${waShape.text.slice(0, 160)}`);
+    assert.equal(waShape.repeated, false, `the same sentence is written twice: ${waShape.text.slice(0, 160)}`);
+    assert.equal(waShape.quoted, false, `the reply is wrapped in quotation marks: ${waShape.text.slice(0, 160)}`);
+    const waLink = waShape.links.find((href) => /wa\.me/i.test(href));
+    assert.ok(Boolean(waLink), `a WhatsApp question came back with no WhatsApp link — links seen: ${JSON.stringify(waShape.links)}`);
+    assert.equal(
+      /^tel:/.test(waLink ?? ""),
+      false,
+      `the WhatsApp address was turned into a dial attempt (${waLink}) instead of a chat link`,
+    );
+    ok(`WhatsApp link asked and answered once, plainly, as a link (${waLink})`);
+  } else {
+    ok(`WhatsApp link check: SKIPPED (no answer this run) — bubble read "${waShape.text.slice(0, 60)}…"`);
+  }
   await page.getByRole("button", { name: "Close chat" }).click();
   await page.waitForTimeout(250);
 
@@ -733,7 +778,7 @@ try {
       };
     });
   const beforeBox = await box();
-  await page.getByRole("textbox", { name: "Your question" }).fill("Tell me in detail how a new screen well works in Florida sand, step by step.");
+  await page.getByRole("textbox", { name: "Your question" }).fill("Bataiye step by step, detail mein: aap free inspection aur jet cleaning ka kaam kaise karte hain, aur warranty kya hoti hai?");
   await page.getByRole("button", { name: "Send your question" }).click();
   await page.waitForFunction(() => { const el = [...document.querySelectorAll(".chat-row-assistant .chat-bubble")].pop(); return !document.querySelector(".chat-send.is-stop") && el && el.textContent.trim().length > 120 && !document.querySelector(".chat-typing"); }, null, { timeout: 60000 });
   const afterLong = await box();

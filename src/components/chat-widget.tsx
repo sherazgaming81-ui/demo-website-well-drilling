@@ -116,6 +116,9 @@ function parseSentinels(raw: string): { text: string; book: boolean; service: st
     })
     // Hide a half-written sentinel while the answer is still streaming.
     .replace(/\[\[[A-Za-z:0-9-]*$/, "")
+    // A model that writes its own line breaks as HTML must not have them flash in the
+    // bubble on the way to the sanitised replace that arrives at the end of the stream.
+    .replace(/<\/?br\s*\/?>/gi, "\n")
     .replace(/\*\*/g, "")
     .replace(/\n{3,}/g, "\n\n")
     .trimEnd();
@@ -174,8 +177,9 @@ function transcriptText(turns: ChatTurn[], reference: string | null) {
 /* A web address or a phone number inside an answer should be usable, not decoration.
    Same tab, always — and an in-app path goes through the router, so jumping to the
    services section or an area page does not throw the conversation away with a full
-   document load. */
-const LINKY = /(https?:\/\/[^\s<]+|www\.[^\s<]+|[a-z0-9-]+(?:\.[a-z0-9-]+)+\.vercel\.app|\/areas\/[a-z0-9-]+|\+?\b\d[\d\s-]{8,13}\d)/gi;
+   document load. wa.me is its own branch on purpose: a bare "wa.me/923005550142"
+   otherwise matches the phone shape and turns a WhatsApp link into a broken dial. */
+const LINKY = /(https?:\/\/[^\s<]+|www\.[^\s<]+|wa\.me\/\d{7,15}|[a-z0-9-]+(?:\.[a-z0-9-]+)+\.vercel\.app|\/areas\/[a-z0-9-]+|\+?\b\d[\d\s-]{8,13}\d)/gi;
 const TRAILING = /[.,;:!?)\]]+$/;
 
 function linkTargets(value: string): { href: string; internal: boolean } | null {
