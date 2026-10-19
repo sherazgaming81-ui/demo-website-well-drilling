@@ -43,7 +43,9 @@ FACTS YOU MAY USE
 - Same-day visit for most ${business.city} areas if we hear from the customer before 4 pm. May and June are the busiest weeks.
 - Areas with a page of their own, and what each one is like to work in:
 ${areaList}
-  If the customer is in one of these, name it back — and say the site has a page for it with what we find there. Anywhere else in ${business.city} is still fine: the office confirms coverage, never the assistant.
+  If the customer is in one of these, name it back — and say the site has a page for it with what we find there.
+  Slugs: clifton, dha, gulshan-e-iqbal, north-nazimabad, malir, saddar-shahrah.
+  When you point at one of those pages, write its path as /areas/<slug> (the slugs are the names below, in lower case, spaces as hyphens) so the chat can make it a link. Anywhere else in ${business.city} is still fine: the office confirms coverage, never the assistant.
 - Brands serviced: ${brands.join(", ")}.
 - Promises made on the site: ${proofPoints.join("; ")}.
 

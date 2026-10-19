@@ -2,7 +2,14 @@ import { NextRequest } from "next/server";
 import { business } from "@/lib/site-data";
 import { buildMessages } from "@/lib/ai/brain";
 import { openingStep, stepFlow, wantsToBook, type FlowSession } from "@/lib/ai/booking-flow";
-import { fetchCompletion, readStream, resolveAttempts, type Attempt } from "@/lib/ai/providers";
+import {
+  fetchCompletion,
+  isCapacityHold,
+  readStream,
+  resolveAttempts,
+  retryAfterMs,
+  type Attempt,
+} from "@/lib/ai/providers";
 import { createThinkScrubber, readsAsNarration, sanitizeAnswer } from "@/lib/ai/sanitize";
 
 export const runtime = "nodejs";
@@ -26,15 +33,28 @@ const MAX_MESSAGES = 20;
 const MAX_CHARS = 1500;
 const MAX_TOTAL_CHARS = 12_000;
 const ATTEMPT_TIMEOUT_MS = 12_000;
+/**
+ * The free tier sheds requests with 429 model_concurrency when the gateway is busy, so a
+ * single attempt turns a working assistant into a shrug. Each model is therefore asked
+ * DAHL_ATTEMPTS times, with a short wait that honours the gateway's own retry_after when
+ * it sends one. Capped at 6 so a misconfigured number cannot make a visitor wait forever.
+ */
+const PER_MODEL_ATTEMPTS = Math.max(1, Math.min(6, Number(process.env.DAHL_ATTEMPTS ?? 4) || 4));
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 // A visitor must not be left staring at "typing" while we discover that every model
 // is rate-limited or out of quota — past this budget the chain stops and says so.
 // 8 attempts × 12s would otherwise be minutes of nothing.
-const CHAIN_BUDGET_MS = 18_000;
+const CHAIN_BUDGET_MS = 32_000; // covers the retries above, and still fails fast for the visitor
 
 /* ----------------------------- rate limiting ----------------------------- */
 
 const RATE_WINDOW_MS = 10 * 60 * 1000;
-const RATE_MAX = 30; // messages per window per IP — generous for one visitor
+/**
+ * Messages per window per IP — generous for one visitor. It is a knob (CHAT_RATE_MAX)
+ * rather than a constant so the automated checks can drive a long conversation without
+ * the run deciding how strict the live site is; the default is what ships.
+ */
+const RATE_MAX = Math.max(1, Number(process.env.CHAT_RATE_MAX ?? 30) || 30);
 
 const globalForLimits = globalThis as typeof globalThis & {
   __chatRateLimit?: Map<string, number[]>;
@@ -276,7 +296,21 @@ export async function POST(request: NextRequest) {
     clientSignal.addEventListener("abort", relayAbort, { once: true });
 
     try {
-      const upstream = await fetchCompletion(attempt as Attempt, messages, controller.signal);
+      let upstream!: Response;
+      for (let tryNo = 1; ; tryNo++) {
+        try {
+          upstream = await fetchCompletion(attempt as Attempt, messages, controller.signal);
+          break;
+        } catch (error) {
+          const lastTry = tryNo >= PER_MODEL_ATTEMPTS;
+          if (lastTry || !isCapacityHold(error) || clientSignal.aborted) throw error;
+          const pause = retryAfterMs(error) ?? Math.min(1200, 260 * tryNo);
+          failures.push(`${attempt.provider}/${attempt.model} try ${tryNo}: busy, waiting ${pause}ms`);
+          console.warn(`[chat] ${attempt.model} at capacity → retry ${tryNo + 1}/${PER_MODEL_ATTEMPTS} after ${pause}ms`);
+          await wait(pause);
+          if (Date.now() - chainStartedAt > CHAIN_BUDGET_MS) throw new Error("chain budget exhausted while retrying");
+        }
+      }
 
       const stream = new ReadableStream<Uint8Array>({
         async start(streamController) {
@@ -356,11 +390,14 @@ export async function POST(request: NextRequest) {
  *  the bubble says instead — short, Hinglish, honest about the failure. */
 const UNSAID = `Is baar jawab tayyar nahi ho saka — dobara poochein, ya office ko ${business.phoneDisplay} par call kar dein. Wahi details le kar aage badha denge.`;
 
+/** Short on purpose: the bubble offers a retry, so the sentence only has to say what
+ *  happened and what to do instead. A wall of apology text is what made this look broken. */
 function unavailable(): Response {
   return Response.json(
     {
-      error: `Is baar jawab tayyar nahi ho saka — answer service abhi reachable nahi hai, aur main guess nahi karunga. Dobara try karein, ${business.phoneDisplay} par call kar lein, ya is page ka inspection form bhar dein — office wahi details le kar aage badha dega.`,
+      error: `Answer service abhi busy hai — is liye maine guess nahi kiya. "Try again" dabayein, ya ${business.phoneDisplay} par call kar lein.`,
+      retryable: true,
     },
-    { status: 503, headers: { "Cache-Control": "no-store" } },
+    { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "3" } },
   );
 }

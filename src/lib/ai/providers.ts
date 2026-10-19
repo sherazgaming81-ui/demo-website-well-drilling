@@ -146,6 +146,20 @@ export async function fetchCompletion(
  * and `thinking` are deliberately ignored — that is the model's chain of thought and
  * a visitor must never see it, even if a gateway starts sending it again.
  */
+/**
+ * A 429 here means "free tier is at capacity right now", not "this prompt is wrong" —
+ * the gateway says so in the body ("Paid accounts are admitted first"). Waiting a beat
+ * and asking again is the correct response to that, and the only one a website can take.
+ * Everything else (401, 402, 400, 404) is a real answer and must not be hammered.
+ */
+export const isCapacityHold = (error: unknown): boolean => /HTTP (408|425|429|500|502|503|504)\b/.test(String(error));
+
+/** how long the gateway asked us to wait, if it said */
+export const retryAfterMs = (error: unknown): number | null => {
+  const match = /"retry_after"\s*:\s*(\d+(?:\.\d+)?)/.exec(String(error));
+  return match ? Math.min(2500, Number(match[1]) * 1000) : null;
+};
+
 export async function readStream(
   body: ReadableStream<Uint8Array>,
   handlers: StreamHandlers,

@@ -257,6 +257,56 @@ try {
   ok(`Reply in the background: tab counted it (${badge.title.slice(0, 4)}…), favicon badged, chime fired ${badge.pings}×, looking cleared all three`);
 
   // the chime is opt-out from the same menu, and the choice survives a reload
+  /* Links inside an answer. Seeded through the tab copy the widget restores, so this
+     does not depend on what the model feels like writing today: a path the site serves
+     has to arrive as a real link, in this tab, without a document reload (a reload
+     would drop the conversation, which is exactly the complaint about chat links). */
+  await page.evaluate(() =>
+    sessionStorage.setItem(
+      "freezepoint.chat.v1",
+      JSON.stringify({
+        sessionId: "link-probe",
+        turns: [
+          { role: "user", content: "Gulshan wala page kahan hai?", at: Date.now() - 60000 },
+          { role: "assistant", content: "Yeh raha: /areas/gulshan-e-iqbal — aur call 0300 5550142.", at: Date.now() - 50000 },
+        ],
+      }),
+    ),
+  );
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "Ask about your AC" }).click();
+  await page.locator(".chat-recent").click();
+  await page.waitForTimeout(300);
+  await page.evaluate(() => {
+    window.__chatSurvivesNav = "alive";
+  });
+  const chatLinks = await page.evaluate(() =>
+    [...document.querySelectorAll(".chat-bubble .chat-link")].map((a) => ({
+      text: a.textContent.trim(),
+      href: a.getAttribute("href"),
+      target: a.getAttribute("target"),
+      rel: a.getAttribute("rel"),
+    })),
+  );
+  assert.equal(chatLinks.length, 2, `expected a path link and a phone link, got ${JSON.stringify(chatLinks)}`);
+  assert.equal(chatLinks[0].href, "/areas/gulshan-e-iqbal", `path link href is ${chatLinks[0].href}`);
+  assert.ok(
+    !chatLinks[0].target || chatLinks[0].target === "_self",
+    `a chat link opens ${chatLinks[0].target} instead of this tab`,
+  );
+  assert.match(chatLinks[1].href, /^tel:\+923005550142$/, `phone link is ${chatLinks[1].href}`);
+  await page.locator(".chat-bubble .chat-link").first().click();
+  await page.waitForFunction(() => location.pathname === "/areas/gulshan-e-iqbal", null, { timeout: 15000 });
+  const nav = await page.evaluate(() => ({ path: location.pathname, sameWindow: window.__chatSurvivesNav ?? null }));
+  assert.equal(nav.path, "/areas/gulshan-e-iqbal", `landed on ${nav.path}`);
+  assert.equal(nav.sameWindow, "alive", "the chat link did a full document load instead of an in-tab route change");
+  ok("Chat links work: /areas path and phone number become usable links, same tab, no reload");
+
+  // back to the home page with its chat open, for the checks that follow
+  await page.goto(baseURL, { waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "Ask about your AC" }).click();
+  await page.getByRole("dialog", { name: /assistant/i }).waitFor({ state: "visible", timeout: 8000 });
+
   await page.getByRole("button", { name: "Chat options" }).click();
   await page.getByRole("menuitem", { name: /turn reply chime off/i }).click();
   assert.equal(await page.evaluate(() => localStorage.getItem("freezepoint.notify-sound.v1")), "off", "the chime choice did not persist");

@@ -143,7 +143,12 @@ it to 1x with `scale: "css"` so the type stays crisp without an image library in
 
 Nothing in the code hardcodes a host, so this is a five-minute job and there is nothing to remember afterwards:
 
-1. **Vercel → Settings → Domains → Add** the client's domain. Point it at Vercel either by moving the nameservers at the registrar
+1. **Rename the project, or add the domain.** The free host is the project name (`https://<project>.vercel.app`), so
+   Vercel → Project Settings → General → **Rename** changes the URL everywhere at once. `src/lib/site-url.ts`
+   reads `VERCEL_PROJECT_PRODUCTION_URL`, which Vercel injects — nothing in the code needs editing, but the
+   last-resort fallback in that file is a literal host for `next build` outside Vercel: update that one line to
+   match, or the local build's canonical will point at the old name.
+   For a real domain instead: Vercel → Settings → Domains → Add the client's domain. Point it at Vercel either by moving the nameservers at the registrar
    (easiest with a Pakistani registrar: keep the zone there and add the `A 76.76.21.21` + `CNAME cname.vercel-dns.com` records Vercel
    lists instead), then wait for the green check.
 2. **Set `NEXT_PUBLIC_SITE_URL=https://www.theirdomain.com`** in Vercel → Environment Variables for *Production* and *Preview*.

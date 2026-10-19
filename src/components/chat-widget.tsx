@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Icon } from "@/components/icons";
+import { useRouter } from "next/navigation";
 import { bookingServices, business } from "@/lib/site-data";
 import { useNotify, useTabBadge } from "@/lib/use-notify";
 
@@ -170,6 +171,68 @@ function transcriptText(turns: ChatTurn[], reference: string | null) {
   return `${head}\n${body}`;
 }
 
+/* A web address or a phone number inside an answer should be usable, not decoration.
+   Same tab, always — and an in-app path goes through the router, so jumping to the
+   services section or an area page does not throw the conversation away with a full
+   document load. */
+const LINKY = /(https?:\/\/[^\s<]+|www\.[^\s<]+|[a-z0-9-]+(?:\.[a-z0-9-]+)+\.vercel\.app|\/areas\/[a-z0-9-]+|\+?\b\d[\d\s-]{8,13}\d)/gi;
+const TRAILING = /[.,;:!?)\]]+$/;
+
+function linkTargets(value: string): { href: string; internal: boolean } | null {
+  if (value.startsWith("/")) return { href: value, internal: true }; // a path the site itself serves
+  const digitsOnly = value.replace(/\D/g, "");
+  const looksLikePhone = /^[+(\d][\d\s().-]{7,}$/.test(value.trim()) && digitsOnly.length >= 10 && !/[a-z]/i.test(value);
+  if (looksLikePhone) {
+    const local = digitsOnly.replace(/^00/, "").replace(/^92/, "").replace(/^0/, "");
+    return { href: `tel:+92${local}`, internal: false };
+  }
+  try {
+    const absolute = value.startsWith("http") ? new URL(value) : new URL(`https://${value}`);
+    const sameSite = absolute.hostname === location.hostname || /vercel\.app$/i.test(absolute.hostname) || absolute.hostname.endsWith(location.hostname);
+    if (sameSite) {
+      const path = `${absolute.pathname}${absolute.search}${absolute.hash}` || "/";
+      return { href: path, internal: true };
+    }
+    return { href: absolute.origin + absolute.pathname + absolute.search + absolute.hash, internal: false };
+  } catch {
+    return null;
+  }
+}
+
+function linkify(text: string, follow: (href: string) => void): ReactNode[] {
+  const out: ReactNode[] = [];
+  let last = 0;
+  for (const match of text.matchAll(LINKY)) {
+    const raw = match[0];
+    const trailing = TRAILING.exec(raw)?.[0] ?? "";
+    const value = trailing ? raw.slice(0, raw.length - trailing.length) : raw;
+    const index = match.index ?? 0;
+    out.push(text.slice(last, index));
+    const target = linkTargets(value);
+    out.push(
+      target ? (
+        <a
+          key={`${index}-${value}`}
+          className="chat-link"
+          href={target.href}
+          onClick={(event) => {
+            if (!target.internal) return; // the browser follows it here, in this tab
+            event.preventDefault();
+            follow(target.href);
+          }}
+        >
+          {value}
+        </a>
+      ) : (
+        raw
+      ),
+    );
+    last = index + raw.length;
+  }
+  out.push(text.slice(last));
+  return out;
+}
+
 export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void }) {
   const [saved] = useState<Saved | null>(() => (typeof window === "undefined" ? null : readSaved()));
   const [open, setOpen] = useState(false);
@@ -183,6 +246,18 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
   const [progress, setProgress] = useState<FlowProgress>(null);
   const [reference, setReference] = useState<string | null>(null);
   const [menu, setMenu] = useState<"none" | "options" | "emoji">("none");
+  const [retry, setRetry] = useState<string | null>(null);
+  const router = useRouter();
+
+  /* internal hops only: a "#…" scrolls in place, a "/…" is swapped by the router so the
+     panel and its history survive; anything external is left to the browser (same tab) */
+  const follow = useCallback((href: string) => {
+    if (href.startsWith("#")) {
+      document.querySelector(href)?.scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+    void router.push(href);
+  }, [router]);
   const [emojiQuery, setEmojiQuery] = useState("");
   const [recentEmoji, setRecentEmoji] = useState<string[]>(() => {
     try {
@@ -352,6 +427,7 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
     setBusy(true);
     setNudgeBook(false);
     setMenu("none");
+    setRetry(null);
     pendingNotify.current = true;
 
     const controller = new AbortController();
@@ -379,6 +455,9 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
 
       if (!response.ok) {
         const detail = await response.json().catch(() => null);
+        // the route says whether waiting and asking again could help; only then is the
+        // button offered — a refused prompt is not worth a "try again"
+        if ((detail as { retryable?: boolean } | null)?.retryable) setRetry(message);
         throw new Error(
           (detail as { error?: string } | null)?.error ??
             `The assistant is unavailable right now. Please call ${business.phoneDisplay}.`,
@@ -392,6 +471,7 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
 
       const decoder = new TextDecoder();
       let buffer = "";
+      let sawErrorFrame = false;
 
       for (;;) {
         const { value, done } = await reader.read();
@@ -423,6 +503,7 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
               // Authoritative final text from the server: price-free, no reasoning.
               updateLast(() => ({ role: "assistant", content: piece, at: Date.now() }));
             } else if (payload.type === "error" && payload.message) {
+              sawErrorFrame = true;
               updateLast((turn) => ({ ...turn, error: true }));
             } else if (payload.type === "booking") {
               // Only the stage label is surfaced (in the header). The flow asks in
@@ -441,6 +522,7 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
         }
       }
 
+      if (sawErrorFrame) setRetry(message);
       updateLast((turn) => {
         if (turn.content.trim()) return turn;
         return {
@@ -450,6 +532,7 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
         };
       });
     } catch (error) {
+      if (!controller.signal.aborted) setRetry(message);
       if (controller.signal.aborted) {
         setTurns((current) => current.filter((turn, index) => index !== current.length - 1 || turn.content));
       } else {
@@ -603,7 +686,7 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
                     ) : (
                       text && (
                         <div className="chat-say">
-                          <p className="chat-bubble">{text}</p>
+                          <p className="chat-bubble">{linkify(text, follow)}</p>
                           {turn.role === "assistant" && (
                             <p className="chat-meta">
                               {business.shortName} · AI assistant · {timeAgo(turn.at)}
@@ -615,6 +698,16 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
                   </div>
                 );
               })}
+
+              {retry && !busy && (
+                <div className="chat-retry" role="status">
+                  <button type="button" className="chat-retry-button" onClick={() => send(retry)}>
+                    <Icon name="arrow-right" size={14} />
+                    Try again
+                  </button>
+                  <a href={business.phoneHref}><Icon name="phone" size={13} />{business.phoneDisplay}</a>
+                </div>
+              )}
 
               {reference && (
                 <div className="chat-booked-card">

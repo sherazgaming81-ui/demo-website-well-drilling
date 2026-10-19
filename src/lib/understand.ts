@@ -13,7 +13,33 @@ import { dateBounds } from "@/lib/booking";
  * never invent. A name we do not recognise is passed through cleaned, not rejected.
  */
 
-/* ------------------------------------------------------------------ spelling */
+/* ------------------------------------------------------------------ spelling *//* ------------------------------------------------------------- short commands */
+/**
+ * The one-word answers a flow runs on (cancel, yes, no, skip) are the ones people
+ * mistype most, because they are typed fast on a phone. A stuck key or a missing
+ * letter must not turn "canel" into a fresh question about the estimate.
+ * Budget is tight on purpose: one edit for short words, two for longer ones, and a
+ * leading word only ever counts as itself — "no" must never match "not".
+ */
+export function matchesCommand(text: string, words: readonly string[]): string | null {
+  const tokens = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  for (const word of words) {
+    const target = word.replace(/[^a-z0-9]/g, "");
+    if (tokens.includes(target)) return word;
+    const budget = target.length <= 5 ? 1 : 2;
+    for (const token of tokens) {
+      if (Math.abs(token.length - target.length) > budget) continue;
+      if (levenshtein(token, target) <= budget) return word;
+    }
+  }
+  return null;
+}
+
+
 
 const levenshtein = (a: string, b: string): number => {
   if (a === b) return 0;

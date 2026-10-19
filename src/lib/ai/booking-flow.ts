@@ -1,6 +1,14 @@
 import { dateBounds, formatDate, validateBooking, type BookingErrors, type BookingFields } from "@/lib/booking";
 import { bookingServices, business } from "@/lib/site-data";
-import { normalizeArea, normalizePhone, parseDateInput, parseTimeInput } from "@/lib/understand";
+import { matchesCommand, normalizeArea, normalizePhone, parseDateInput, parseTimeInput } from "@/lib/understand";
+
+const FIELD_WORDS = ["service", "area", "date", "time", "name", "email", "phone", "notes"] as const;
+
+/** "change emial" should still mean the email step */
+function fuzzyField(text: string): (typeof FIELD_WORDS)[number] | undefined {
+  const found = matchesCommand(text, FIELD_WORDS);
+  return found as (typeof FIELD_WORDS)[number] | undefined;
+}
 import { createBooking, newRequestId } from "@/lib/booking-store";
 
 /**
@@ -123,15 +131,24 @@ function parseEmail(text: string): string | null {
   return m ? m[0] : null;
 }
 
+const YES_WORDS = ["yes", "yeah", "yep", "sure", "ok", "okay", "agree", "send", "go", "fine", "haan", "ji", "theek", "bhej", "kar do"] as const;
+const NO_WORDS = ["no", "nope", "never", "cancel", "stop", "wait", "baad", "rehne"] as const;
+
+/** yes / no, in either language, with a mistyped key tolerated. A "not now" is a no,
+ *  which is why the negative list is checked first. */
 function parseConsent(text: string): boolean | null {
-  const t = text.toLowerCase().trim();
-  if (/^(y|yes|yeah|yep|sure|ok|okay|agree|i agree|go ahead|do it|send it|fine|yes please)\b/.test(t) && !/\b(no|not|don.t|never)\b/.test(t)) return true;
-  if (/^(n|no|nope|don.t|do not|cancel|stop|never)\b/.test(t)) return false;
-  return null;
+  const saidNo = matchesCommand(text, NO_WORDS);
+  const saidYes = matchesCommand(text, YES_WORDS);
+  if (saidNo && !/^\s*(yes|haan|ji)\b/i.test(text.trim())) return false;
+  if (saidNo) return false;
+  return saidYes ? true : null;
 }
 
+const CANCEL_WORDS = ["cancel", "stop", "quit", "exit", "back out", "forget it", "never mind"] as const;
+
+/** "canel", "cancel yaar", "bas karo" — all of them mean the same thing */
 export function isCancel(text: string): boolean {
-  return /^\s*(cancel|stop|quit|never ?mind|forget it|back out|exit)\b/i.test(text);
+  return matchesCommand(text, CANCEL_WORDS) !== null;
 }
 
 const errorFor = (fields: Partial<BookingFields>, key: keyof BookingFields): string | undefined =>
@@ -209,7 +226,9 @@ export async function stepFlow(previous: FlowSession, text: string): Promise<Flo
   }
 
   if (session.stage === "confirm") {
-    const change = raw.match(/^change\s+(service|area|date|time|name|email|phone|notes)$/i)?.[1];
+    const change = /\b(chane|chnage|chang e|change|edit|fix|update|sudhar)\b/i.test(raw)
+      ? fuzzyField(raw)
+      : undefined;
     if (change) {
       const map: Record<string, FlowStage> = { service: "service", area: "area", date: "date", time: "time", name: "name", email: "email", phone: "phone", notes: "notes" };
       session.stage = map[change];
@@ -328,7 +347,7 @@ export async function stepFlow(previous: FlowSession, text: string): Promise<Flo
       return next(session);
     }
     case "notes": {
-      session.fields.notes = /^(skip|none|no|nothing|that's it|that is it)$/i.test(raw) ? "" : raw.slice(0, 1500);
+      session.fields.notes = matchesCommand(raw, ["skip", "none", "nothing", "chhodo", "bas"]) !== null ? "" : raw.slice(0, 1500);
       session.stage = "consent";
       return next(session);
     }
