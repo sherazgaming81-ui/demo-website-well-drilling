@@ -273,9 +273,15 @@ export const serviceAreas = [
  */
 export const karachiAreas = [
   { name: "Clifton", aliases: ["block 1", "block 2", "block 4", "block 5", "block 8", "block 9", "boat basin", "khyaban-e-ittahad", "khiaban-e-ittahad"] },
-  { name: "DHA", aliases: ["defence", "defence housing", "dha phase 4", "dha phase 5", "dha phase 6", "dha phase 7", "dha phase 8"] },
+  {
+    name: "DHA",
+    aliases: [
+      "defence", "defence housing", "dha karachi",
+      ...["1", "2", "3", "4", "5", "6", "7", "8"].flatMap((n) => [`dha phase ${n}`, `dha ${n}`, `phase ${n} dha`, `defence phase ${n}`, `dha phase${n}`]),
+    ],
+  },
   { name: "Gulshan-e-Iqbal", aliases: ["gulshan", "gulshan iqbal", "gulshan e iqbal", "block 5", "block 6", "block 7", "block 10", "block 13", "university road", "shahrah-e-noor"] },
-  { name: "North Nazimabad", aliases: ["nazimabad", "north nazim abad", "block 1", "block 4", "block 7", "safoora", "larknose"] },
+  { name: "North Nazimabad", aliases: ["nazimabad", "north nazim abad", "north nazimabad", "block 1", "block 4", "block 7", "block 10", "safoora", "safoora chowrangi", "larknose"] },
   { name: "Malir", aliases: ["malir cantt", "malir city", "rashid minhas", "gulzar-e-meherban", "jinnah garden", "kda chorsahi"] },
   { name: "Saddar", aliases: ["bolton market", "maryam road", "zainab chowk", "new charkadan", "kharadar", "mithadar"] },
   { name: "Korangi", aliases: ["korangi town", "korangi industrial", "site", "site area", "shah faisal colony", "landhi", "landhhi", "korangi block 5", "gulzar-e-hijri", "mahmabad"] },
@@ -290,6 +296,39 @@ export const karachiAreas = [
   { name: "Lyari", aliases: ["lyari nadi", "bhainta colony", "gagar", "machar colony", "united chowrangi"] },
   { name: "Gizri", aliases: ["gizri block 3", "gulshan gizri"] },
   { name: "Orangi", aliases: ["orangi town", "saddar orangi", "mangoopir"] },
+] as const;
+
+/**
+ * Testimonials for the demo build. These are written for the portfolio piece, not
+ * collected from customers — the section labels them as illustrative on the page, and
+ * the footer and privacy dialog say the same. Keep each review to two lines so the
+ * block stays scannable on a phone.
+ */
+export const demoReviews = [
+  {
+    name: "Ahmed Sheikh",
+    area: "DHA Phase 5",
+    stars: 5,
+    image: "/images/reviewer-1.webp",
+    alt: "Portrait of a man in a white shalwar kameez in his living room, used as a review avatar on this demonstration site",
+    text: "They found the leak before topping up the gas, and wrote the pressures down on the job card. First time someone showed me the numbers instead of the bill.",
+  },
+  {
+    name: "Sadia Khan",
+    area: "Gulshan-e-Iqbal Block 6",
+    stars: 5,
+    image: "/images/reviewer-2.webp",
+    alt: "Portrait of a woman in a light blue dupatta in a bright kitchen, used as a review avatar on this demonstration site",
+    text: "Jet cleaning before the season, dust sheets on the floor, and a photo of both coils before and after on WhatsApp. The drain smell has stayed gone.",
+  },
+  {
+    name: "Bilal Aslam",
+    area: "Clifton Block 2",
+    stars: 4,
+    image: "/images/reviewer-3.webp",
+    alt: "Portrait of a shopkeeper in a waistcoat inside his electronics shop, used as a review avatar on this demonstration site",
+    text: "Our shop cassette died on a Saturday. They came after closing, found a burnt contactor, and the fans were turning again before morning.",
+  },
 ] as const;
 
 /** Job-site photography for the work gallery. */

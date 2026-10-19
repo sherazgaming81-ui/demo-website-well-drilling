@@ -1322,6 +1322,34 @@ h1 > span { display: block; white-space: nowrap; }
 }
 @media (prefers-reduced-motion: reduce) { .process-rail i::after { transition: none; } .process-step.is-active { transform: none; box-shadow: none; } }
 
+/* ── Demo testimonials ──────────────────────────────────────────────────
+   Three short cards, the site's own paper and blue, and a label that says out
+   loud what they are. Nothing here invents a rating feed or a review widget. */
+.demo-reviews { padding: 76px 0 88px; background: var(--chill-bg); border-bottom: 1px solid var(--line); }
+.demo-reviews .section-heading { margin-bottom: 28px; }
+.demo-reviews-note { display: inline-flex; align-items: center; gap: 7px; font-size: 10px; font-weight: 700; letter-spacing: .9px; text-transform: uppercase; color: var(--muted); background: white; border: 1px dashed #c3d7e4; border-radius: 999px; padding: 7px 13px; white-space: nowrap; }
+.demo-reviews-note::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
+.review-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); gap: 16px; }
+.review-card { margin: 0; display: flex; flex-direction: column; gap: 9px; background: white; border: 1px solid var(--line); border-radius: 14px; padding: 20px 20px 22px; transition: transform .2s, box-shadow .2s; }
+.review-card:hover { transform: translateY(-2px); box-shadow: 0 14px 30px #0d203014; }
+.review-avatar { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid white; box-shadow: 0 3px 10px #0d203026; }
+.review-card figcaption { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
+.review-card figcaption strong { font-family: "Freeze Display", "Freeze Body", Arial, sans-serif; font-size: 15px; font-weight: 600; letter-spacing: -.2px; }
+.review-card figcaption span { font-size: 10px; letter-spacing: 1.1px; text-transform: uppercase; color: var(--muted); }
+.review-stars { display: inline-flex; gap: 1px; color: #edaa48; }
+.review-stars .is-empty { color: #cfdde6; }
+.review-card blockquote { margin: 0; font-size: 13.5px; line-height: 1.72; color: #2c4c5e; }
+@media (max-width: 700px) {
+  .demo-reviews { padding: 54px 0 62px; }
+  /* Stacking three cards cost 1.3 extra screens on a phone, which is the one thing
+     this site is trying to stop doing. One row, dragged sideways, same words. */
+  .review-grid { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 2px 0 12px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .review-grid::after { content: ""; flex: 0 0 2px; }
+  .review-grid::-webkit-scrollbar { display: none; }
+  .review-card { flex: 0 0 76%; min-width: 0; scroll-snap-align: center; padding: 17px 17px 19px; }
+  .review-card blockquote { font-size: 13px; }
+}
+
 /* ══ Area pages (/areas, /areas/[area]) ═══════════════════════════════════
    Extra routes, same design language: the container, the header and the footer
    are the home page's own, so a locality page cannot look like a different

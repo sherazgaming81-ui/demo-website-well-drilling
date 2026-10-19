@@ -226,5 +226,53 @@ check("every date phrasing a customer types is understood", missed.length === 0,
   check("a number the office cannot dial is refused in the customer’s language", /Pakistan ka mobile/i.test(foreign.text) && foreign.stage === "phone", `${foreign.text.slice(0, 64)} · stage=${foreign.stage}`);
 }
 
+/* ------------------------------------------------------- the audit's four fixes */
+// 1. the area list must contain what the site itself shows ("DHA Phase 5 · new 1.5-ton
+//    unit") and what its own error message names. Checked through the form endpoint,
+//    because the form and the chat read the same validator.
+const postBooking = async (body) => {
+  const res = await fetch(`${base}/api/bookings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: base.replace(/^https?:\/\//, "http://") },
+    body: JSON.stringify({
+      service: "ac-service", preferredDate: new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10),
+      timePreference: "morning", fullName: "Audit Probe", email: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@example.com`,
+      phone: "0300 5550142", notes: "", consent: true, website: "", requestId: crypto.randomUUID(), ...body,
+    }),
+  });
+  return { status: res.status, json: await res.json().catch(() => ({})) };
+};
+for (const area of ["DHA Phase 5", "DHA 5", "Phase 5 DHA", "Defence Phase 5", "Korangi Block 8", "Clifton Block 2", "75350"]) {
+  const r = await postBooking({ area });
+  check(`the form accepts “${area}”`, r.status === 201 || r.status === 200, `${r.status} ${JSON.stringify(r.json.errors ?? "")}`);
+}
+{
+  const r = await postBooking({ area: "dha phase 3" });
+  check("a lowercase phase name is saved properly cased", r.status === 201 || r.status === 200, String(r.status));
+}
+{
+  const r = await postBooking({ area: "????" });
+  check("a nonsense area is still refused", r.status === 422, `${r.status}`);
+}
+
+// 3. a first message that already contains the details must not be thrown away.
+{
+  const id = crypto.randomUUID();
+  const seed = "Mera naam Ahmed hai, main DHA Phase 5 mein rehta hun. Mujhe AC general service book karni hai, kal subah theek rahega.";
+  const first = await askIn(id, seed, true);
+  const asked = first.stage;
+  check("a combined first message is read, not restarted", asked === "email" || asked === "phone", `flow asked for: ${asked}`);
+  if (asked === "email") await askIn(id, "ahmed.audit@example.com");
+  await askIn(id, "0314 2580054");
+  await askIn(id, "skip");
+  const readback = await askIn(id, "haan");
+  const saved = (label) => new RegExp(`${label}: ([^\n]+)`).exec(readback.text)?.[1]?.trim() ?? "";
+  check("the extracted area kept its phase", /^DHA Phase 5$/.test(saved("Area")), `saved ${JSON.stringify(saved("Area"))}`);
+  check("the extracted name is the name, not the sentence", /^Ahmed(\s|$)/.test(saved("Name")), `saved ${JSON.stringify(saved("Name"))}`);
+  check("the extracted date is tomorrow", saved("Preferred date").length > 4, `saved ${JSON.stringify(saved("Preferred date"))}`);
+  check("the extracted time is the morning window", /Morning/.test(saved("Time")), `saved ${JSON.stringify(saved("Time"))}`);
+  check("the phone was canonicalised to +92", /\+923142580054/.test(readback.text), readback.text.match(/Phone: [^\n]+/)?.[0] ?? "");
+}
+
 console.log(`\n${fails === 0 ? "CHAT BOOKING: all checks passed" : `${fails} CHECK(S) FAILED`}`);
 process.exit(fails === 0 ? 0 : 1);

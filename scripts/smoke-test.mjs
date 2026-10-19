@@ -343,6 +343,28 @@ try {
     };
   });
   assert.equal(firstWords.tagLeak, false, `a model tag reached the visible chat: ${firstWords.whole}`);
+  /* The greeting and every answer must read like a person, not a transcript of the
+     model's own instructions: one greeting, no bracketed aside about wording, no plan
+     narration. Asserted on the rendered bubble, because that is what a visitor sees. */
+  const shape = await page.evaluate(() => {
+    const bubbles = [...document.querySelectorAll(".chat-row-assistant .chat-bubble")].map((el) => el.textContent.trim());
+    const last = bubbles[bubbles.length - 1] ?? "";
+    return {
+      count: bubbles.length,
+      startsWithParen: /^\(/.test(last),
+      metaAside: /\((?:If you prefer|Note:|Let me|Since |Given )/i.test(last),
+      selfTalk: /^\s*(?:\*\*)?i (?:should|need to|need|must|will|am going to)\b[^.\n]{0,90}\b(?:hinglish|short|under \d+ words|professional|warm|tone|answer|respond|reply|keep it)\b/i.test(last),
+      sentinel: /\[\[|\]\]/.test(last),
+      last: last.slice(0, 80),
+    };
+  });
+  assert.ok(shape.count >= 1, "no assistant answer was rendered, so its shape could not be checked");
+  assert.equal(shape.startsWithParen, false, `an answer opened with a bracketed aside: ${shape.last}`);
+  assert.equal(shape.metaAside, false, `an answer contains a note about its own wording: ${shape.last}`);
+  assert.equal(shape.selfTalk, false, `the model's plan reached the visible answer: ${shape.last}`);
+  assert.equal(shape.sentinel, false, "a [[SENTINEL]] token was visible in the bubble");
+  ok("Answers read like a person: one greeting, no bracketed asides, no plan narration, no sentinels");
+
   const metaLine = await page.evaluate(() => document.querySelector(".chat-row-assistant .chat-meta")?.innerText ?? "");
   assert.match(metaLine, /Freeze Point · AI assistant · (just now|\d+[mh] ago)/, `attribution line reads ${JSON.stringify(metaLine)}`);
   // The brief now demands a short, Hinglish, un-formatted reply. Measured on a real
@@ -417,6 +439,23 @@ try {
       assert.equal(hinglish, true, `DeepSeek answered a Roman-Urdu question in English-only: ${asked.text}`);
     }
     ok(`Answer style: ${words} words, no list, no markdown, Hinglish back to a Hinglish question`);
+
+  // The greeting: one, not two, and never a note about the reply itself.
+  const greetTurn = await page.evaluate(() => {
+    const bubbles = [...document.querySelectorAll(".chat-row-assistant .chat-bubble")].map((el) => el.textContent.trim());
+    const last = bubbles[bubbles.length - 1] ?? "";
+    return {
+      startsWithParen: /^\(/.test(last),
+      metaAside: /\((?:If you prefer|Note:|Let me|Since |Given )/i.test(last),
+      doubled: /^(.{0,40}[?!.[^\n]{0,30})\1/.test(last),
+      selfTalk: /^i (?:should|need to|must|will)\b[^.]{0,60}\b(?:hinglish|short|under \d+ words|professional|warm|tone|answer in)\b/i.test(last),
+      last: last.slice(0, 70),
+    };
+  });
+  assert.equal(greetTurn.startsWithParen, false, `a reply opened with a bracketed aside: ${greetTurn.last}`);
+  assert.equal(greetTurn.metaAside, false, `a reply contains a note about its own wording: ${greetTurn.last}`);
+  assert.equal(greetTurn.selfTalk, false, `the model's own plan reached the visible answer: ${greetTurn.last}`);
+  ok("Greeting is single and free of self-talk (no bracketed asides, no plan narration)");
   } else {
     // Skipped out loud: the model service refused to answer this run. What is still
     // enforced is that a refusal stays honest — an error bubble, never a scripted
@@ -455,6 +494,28 @@ try {
   await page.getByRole("button", { name: "Can you just refill the gas?", exact: true }).click();
   assert.equal(await page.locator("#faq-answer-2").isVisible(), false);
   ok("Project gallery and FAQ accordion");
+  /* The testimonials block: three short cards, and the label that says they are demo
+     material — the section is not allowed to exist without it. */
+  const reviews = await page.evaluate(() => {
+    const sec = document.getElementById("reviews");
+    if (!sec) return null;
+    return {
+      cards: sec.querySelectorAll(".review-card").length,
+      avatars: [...sec.querySelectorAll(".review-avatar")].map((img) => img.naturalWidth),
+      label: sec.querySelector(".demo-reviews-note")?.innerText.trim() ?? "",
+      longest: Math.max(0, ...[...sec.querySelectorAll("blockquote")].map((q) => q.textContent.trim().split(/\s+/).length)),
+      heading: sec.querySelector("h2")?.innerText.trim() ?? "",
+    };
+  });
+  assert.ok(reviews, "the #reviews section is missing");
+  assert.equal(reviews.cards, 3, `expected 3 review cards, got ${reviews.cards}`);
+  assert.equal(reviews.avatars.length, 3, "the review avatars are not rendering");
+  assert.ok(reviews.avatars.every((w) => w > 0), "a review avatar failed to decode");
+  assert.match(reviews.label, /demo reviews for illustration/i, `the disclosure label reads ${JSON.stringify(reviews.label)}`);
+  assert.ok(reviews.longest <= 34, `a review runs to ${reviews.longest} words; the audit asked for 1–2 lines`);
+  assert.match(reviews.heading, /their own words/i);
+  await page.locator("#reviews").screenshot({ path: "artifacts/reviews-section.png" });
+  ok(`Testimonials: 3 cards (${reviews.longest}-word longest), avatars decode, and the “${reviews.label}” label is on the page`);
 
   // Real contact details must be present, and placeholder demo text gone.
   const body = await page.locator("body").innerText();

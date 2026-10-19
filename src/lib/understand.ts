@@ -86,7 +86,7 @@ function closest(needle: string, options: string[]): string | null {
   return best?.option ?? null;
 }
 
-const titleCase = (value: string) =>
+export const titleCase = (value: string) =>
   value
     .split(" ")
     .filter(Boolean)
@@ -101,25 +101,32 @@ const titleCase = (value: string) =>
  * sloppier, and a fuzzy hit on one quietly renames a real neighbourhood into someone
  * else's, which is worse than not matching at all.
  */
-type AreaEntry = { key: string; canonical: string; fuzzy: boolean };
+type AreaEntry = { key: string; canonical: string; display: string; fuzzy: boolean };
 const AREA_ENTRIES: AreaEntry[] = [];
+const pushEntry = (entry: AreaEntry) => {
+  if (!AREA_ENTRIES.some((seen) => seen.key === entry.key)) AREA_ENTRIES.push(entry);
+};
+/**
+ * An alias like "dha phase 5" belongs to DHA, but the *display* must keep the detail —
+ * saving "DHA" and losing the phase is exactly what the office cannot use. So the
+ * display is the alias with the area's own name spelled the way the brand spells it.
+ */
+const displayFor = (alias: string, name: string) => {
+  const rest = alias.toLowerCase().startsWith(`${name.toLowerCase()} `) ? alias.slice(name.length).trim() : "";
+  if (!rest) return alias.toLowerCase() === name.toLowerCase() ? name : titleCase(alias);
+  return `${name} ${titleCase(rest)}`;
+};
 for (const area of karachiAreas) {
-  if (!AREA_ENTRIES.some((entry) => entry.canonical === area.name && entry.fuzzy)) {
-    AREA_ENTRIES.push({ key: squash(area.name), canonical: area.name, fuzzy: true });
-  }
+  pushEntry({ key: squash(area.name), canonical: area.name, display: area.name, fuzzy: true });
   for (const alias of area.aliases) {
-    const key = squash(alias);
-    if (key !== squash(area.name) && !AREA_ENTRIES.some((entry) => entry.key === key)) {
-      AREA_ENTRIES.push({ key, canonical: area.name, fuzzy: false });
-    }
+    pushEntry({ key: squash(alias), canonical: area.name, display: displayFor(alias, area.name), fuzzy: false });
   }
 }
 for (const area of serviceAreas) {
-  const key = squash(area.name);
-  if (!AREA_ENTRIES.some((entry) => entry.key === key)) AREA_ENTRIES.push({ key, canonical: area.name, fuzzy: true });
+  pushEntry({ key: squash(area.name), canonical: area.name, display: area.name, fuzzy: true });
 }
 
-function matchArea(word: string): AreaEntry | null {
+export function matchArea(word: string): AreaEntry | null {
   const target = squash(word);
   if (target.length < 3) return null;
   const exact = AREA_ENTRIES.find((entry) => entry.key === target);
@@ -159,7 +166,12 @@ export function normalizeArea(raw: string): AreaResult | null {
   if (/^\d{5}([- ]\d{5})?$/.test(cleaned.trim())) return { value: digits.slice(0, 5), corrected: false };
 
   if (!/[A-Za-z]/.test(cleaned)) return null;
-  const shape = /^[A-Za-z][A-Za-z.'\-\s]{1,59}$/;
+  /* Karachi names carry numbers constantly — "DHA Phase 5", "Clifton Block 2",
+     "Korangi Block 5" — and the gallery itself shows "DHA Phase 5". A guard that
+     rejected digits was rejecting the areas the site tells people to type, so
+     numbers are part of the shape now (a leading letter still is what makes it a
+     place rather than a stray number). */
+  const shape = /^[A-Za-z][A-Za-z0-9.'#\-\s]{1,59}$/;
   if (!shape.test(cleaned)) return null;
 
   // the flag answers a different question than the match does: is what we are about to
@@ -172,13 +184,15 @@ export function normalizeArea(raw: string): AreaResult | null {
     const value = rest ? `${canonical} ${titleCase(rest)}` : canonical;
     return { value, corrected: value.toLowerCase().replace(/[^a-z0-9]/g, "") !== asTyped };
   };
+  const whole = matchArea(cleaned);
+  if (whole) return { value: whole.display, corrected: squash(whole.display) !== asTyped };
   const head = matchArea(single);
-  if (head) return withTail(head.canonical, tail);
+  if (head) return withTail(head.display, tail);
 
   // multi-word names typed with the join words in ("Gulshan e Iqbal") match as a pair
   if (words.length > 1) {
     const pair = matchArea(`${words[0]} ${words[1]}`);
-    if (pair) return withTail(pair.canonical, words.slice(2).join(" "));
+    if (pair) return withTail(pair.display, words.slice(2).join(" "));
   }
 
   // an area we do not know is kept as the visitor wrote it, only tidied —

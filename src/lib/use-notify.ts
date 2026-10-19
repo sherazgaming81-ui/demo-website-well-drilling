@@ -50,7 +50,7 @@ async function badgedIcon(count: number): Promise<string | null> {
   try {
     const image = new window.Image();
     image.src = "/icons/icon-192.png";
-    await (image.decode?.() ?? new Promise<void>((resolve, reject) => {
+    await (typeof image.decode === "function" ? image.decode() : new Promise<void>((resolve, reject) => {
       image.onload = () => resolve();
       image.onerror = () => reject(new Error("icon did not load"));
     }));
@@ -83,7 +83,10 @@ async function badgedIcon(count: number): Promise<string | null> {
 }
 
 function setFavicon(href: string | null) {
-  const links = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel~="icon"]'));
+  // every icon link, not the first: Next emits both /favicon.ico and /icon.png, and
+  // which one a browser paints is the browser's mood — a badge only half-applied is a
+  // badge that silently does nothing on some machines
+  const links = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel~="icon"], link[rel="shortcut icon"]'));
   if (!links.length) {
     const link = document.createElement("link");
     link.rel = "icon";

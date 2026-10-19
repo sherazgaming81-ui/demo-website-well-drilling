@@ -69,8 +69,87 @@ function stripNarrationSentences(text: string): { text: string; hit: boolean } {
   return { text: kept.join(" ").trim(), hit: true };
 }
 
-function stripPlanNarration(text: string): { text: string; hit: boolean } {
+/* The aside a model writes to itself about language or length ("(If you prefer
+   English, let me know.)") is not an answer, and leaving it in front of the real
+   greeting read like the greeting had been said twice with no space. Removed, and the
+   seam closed. */
+const META_ASIDE = /^[\s\-*]*(?:\((?:[^)]{0,120})\)|\[[^\]]{0,120}\])\s*(?=[A-Z\u0600-\u06FF])/;
+const META_PHRASE = /\b\w+\b[^.!?\n]{0,60}\b(english|urdu|language|tone|length|format|emoji|markdown|sentence|sentences|words?)\b[^.!?\n]{0,40}[.!?]?\s*$/i;
+
+function stripMetaAsides(text: string): { text: string; hit: boolean } {
+  let out = text.trim();
+  let hit = false;
+  for (let i = 0; i < 2; i++) {
+    const aside = META_ASIDE.exec(out);
+    if (aside && META_PHRASE.test(aside[0])) {
+      out = out.slice(aside[0].length).trim();
+      hit = true;
+      continue;
+    }
+    break;
+  }
+  return { text: out, hit };
+}
+
+/* Two greetings in one message (same shape, slightly different words) is a model
+   stutter, not a style. Only the first two sentences are compared, and only when both
+   look like greetings, so a real answer can never be edited by this rule. */
+const GREETINGISH = /^(?:salaam|salam|assalamu|hello|hi|hey|ji|wa[ -]?alaikum|kaise|kaisay|bataie?n?|kya masla)/i;
+function dropStutteredGreeting(text: string): { text: string; hit: boolean } {
+  const parts = text.split(/(?<=[.!?])\s+/);
+  if (parts.length < 2) return { text, hit: false };
+  const [first, second] = parts;
+  if (!GREETINGISH.test(first.trim()) || !GREETINGISH.test(second.trim())) return { text, hit: false };
+  const norm = (v: string) => v.toLowerCase().replace(/[^a-z\u0600-\u06FF0-9 ]/g, "").split(/\s+/).filter(Boolean);
+  const a = new Set(norm(first));
+  const b = norm(second);
+  const overlap = b.filter((word) => a.has(word)).length;
+  if (b.length === 0 || overlap / b.length < 0.34) return { text, hit: false };
+  return { text: parts.slice(1).join(" ").trim(), hit: true };
+}
+
+/* ------------------------------------------------- the model talking about itself */
+/*
+ * A reply that opens by describing how it will be written ("I need to respond in
+ * Hinglish, keeping it short (under 60 words), warm and professional…") is not an
+ * answer. The tell is not the first-person start — "I will check the capacitor before
+ * I answer you" is a fine answer — it is a sentence that talks about the *reply* while
+ * saying nothing about the air conditioner. So both halves have to be true, and two or
+ * more style words have to appear, before a sentence is removed.
+ */
+const SELF_TALK_OPEN = /^[\s\-*"]*(?:\*\*)?\s*(?:so[, ]+|well[, ]+|however[, ]+|first[, ]+|okay[, ]+)?i(?:\u2019|')?m?\s+(?:should|need|have|must|will|shall|\u2019|')?(?:\s*(?:to|going\s+to|gonna))?\s*\w*|^(?:so[, ]+|well[, ]+)?let\s+me\b/i;
+const STYLE_WORDS = /\b(hinglish|english|urdu|roman|language|tone|format|formatting|markdown|bullet|bullets|emoji|emojis|greeting|polite|professional|warm|casual|friendly|brief|short|length|words|word\s*limit|sentences?|characters?|under\s+\d+|avoid|not\s+quote|price|prices|quoting|rules?|instructions?|guidelines?|policy|system\s*prompt|stay\s+in\s*character|my\s+(?:role|task|job|goal|approach|plan))\b/gi;
+const ABOUT_THE_AC = /\b(ac|air\s*conditioner|cooling|not\s+cool|gas|leak|charge|compressor|capacitor|pcb|board|coil|filter|drain|water|drip|noise|service|jet\s*clean|install|inverter|duct|cassette|amc|ton|technician|inspection|visit|area|booking|book|slot|quote)\b/i;
+
+function isSelfTalk(sentence: string): boolean {
+  const clean = sentence.trim();
+  if (clean.length < 12) return false;
+  if (!SELF_TALK_OPEN.test(clean)) return false;
+  const style = clean.match(STYLE_WORDS);
+  return !!style && new Set(style.map((word) => word.toLowerCase())).size >= 2 && !ABOUT_THE_AC.test(clean);
+}
+
+/**
+ * Removed sentence by sentence from the front, so a long monologue about the reply
+ * cannot hide behind a word-count guard, and one real sentence further down survives.
+ */
+function stripSelfTalk(text: string): { text: string; hit: boolean } {
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  let index = 0;
+  while (index < sentences.length && isSelfTalk(sentences[index])) index++;
+  if (index === 0) return { text, hit: false };
+  return { text: sentences.slice(index).join(" ").trim(), hit: true };
+}
+
+function stripPlanNarration(raw: string): { text: string; hit: boolean } {
+  let text = raw;
+  const selfTalk = stripSelfTalk(text);
+  if (selfTalk.hit) text = selfTalk.text;
+  const aside = stripMetaAsides(text);
+  if (aside.hit) text = aside.text;
   if (PLAN_AS_REPLY.test(text.trim()) || readsAsNarration(text)) return { text: "", hit: true };
+  const stutter = dropStutteredGreeting(text);
+  if (stutter.hit) text = stutter.text;
   const lines = text.split("\n");
   let index = 0;
   while (index < lines.length) {
@@ -84,7 +163,7 @@ function stripPlanNarration(text: string): { text: string; hit: boolean } {
     index++;
   }
   const kept = lines.slice(index).join("\n").trim();
-  return { text: kept, hit: index > 0 && kept !== text.trim() };
+  return { text: kept, hit: (index > 0 || selfTalk.hit || aside.hit || stutter.hit) && kept !== raw.trim() };
 }
 
 

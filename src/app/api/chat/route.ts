@@ -260,7 +260,11 @@ export async function POST(request: NextRequest) {
   // booking is done, a fresh "book me" opens a new flow instead of chatting at them.
   const canOpenFlow = !activeFlow || activeFlow.stage === "done";
   if (wantsFlow || restarting || (canOpenFlow && wantsToBook(lastUser))) {
-    return flowStream(openingStep(wantsFlow || restarting ? null : lastUser), sessionId);
+    // the opening message is passed as the seed on EVERY path, including the CTA that
+    // sends startBooking — a visitor who wrote "naam Ahmed, DHA Phase 5, kal subah"
+    // and then tapped the button has already answered four of the ten questions, and
+    // throwing that away is what made the flow look like it had no memory
+    return flowStream(openingStep(lastUser || null), sessionId);
   }
 
   const history = parseMessages(parsed);

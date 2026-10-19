@@ -11,7 +11,7 @@ import { CountUp } from "@/components/count-up";
 import { WorkGallery } from "@/components/work-gallery";
 import { Brand, BrandMark, Contours, Icon, type IconName } from "@/components/icons";
 import { Modal } from "@/components/modal";
-import { brands, business, faqs, projects, proofPoints, serviceAreas, services, stats, steps } from "@/lib/site-data";
+import { brands, business, demoReviews, faqs, projects, proofPoints, serviceAreas, services, stats, steps } from "@/lib/site-data";
 import { rv, useReveals, useScrollFx } from "@/lib/use-reveals";
 import { jsonLd, localBusinessGraph, siteFaqGraph } from "@/lib/schema";
 import { useFinePointer, useParallax, useStepRail } from "@/lib/use-motion";
@@ -150,6 +150,17 @@ export default function HomePage() {
 
       <section id="work" className="reviews-section" aria-labelledby="work-title">
         <div className="container reviews-grid work-row"><div className="reviews-intro" {...rv(0)}><p className="eyebrow eyebrow-line">OUR WORK</p><h2 id="work-title">Real jobs.<br />Karachi heat.</h2><p>Rooftop condensers at 3 pm, choked coils, boards on the bench and new units levelled on a wall. A look at recent work across the city.</p><div className="reviews-score"><strong>{stats[1].value}</strong><div><span>Units serviced since {business.established}</span><span>{stats[2].value} warranty on workmanship</span></div></div></div><WorkGallery /></div>
+      </section>
+      <section id="reviews" className="section demo-reviews" aria-labelledby="reviews-title">
+        <div className="container">
+          <div className="section-heading"><div {...rv(0)}><p className="eyebrow eyebrow-line">WHAT CUSTOMERS SAY</p><h2 id="reviews-title">Cold rooms, in their own words.</h2></div><p className="demo-reviews-note">Demo reviews for illustration</p></div>
+          <div className="review-grid">{demoReviews.map((review, index) => <figure className="review-card" key={review.name} {...rv(index)}>
+            <Image className="review-avatar" src={review.image} alt={review.alt} width={88} height={88} sizes="(max-width: 700px) 76px, 88px" />
+            <figcaption><strong>{review.name}</strong><span>{review.area}</span></figcaption>
+            <span className="review-stars" aria-label={`${review.stars} out of 5 stars`}>{Array.from({ length: 5 }, (_, star) => <Icon key={star} name="star" size={12} className={star < review.stars ? "" : "is-empty"} />)}</span>
+            <blockquote>{review.text}</blockquote>
+          </figure>)}</div>
+        </div>
       </section>
 
       <section className="section ba-wrap" aria-labelledby="ba-title">

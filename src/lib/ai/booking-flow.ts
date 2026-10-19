@@ -1,6 +1,6 @@
 import { dateBounds, formatDate, validateBooking, type BookingErrors, type BookingFields } from "@/lib/booking";
 import { bookingServices, business } from "@/lib/site-data";
-import { matchesCommand, normalizeArea, normalizePhone, parseDateInput, parseTimeInput } from "@/lib/understand";
+import { matchArea, matchesCommand, normalizeArea, normalizePhone, parseDateInput, parseTimeInput, titleCase } from "@/lib/understand";
 
 const FIELD_WORDS = ["service", "area", "date", "time", "name", "email", "phone", "notes"] as const;
 
@@ -61,14 +61,118 @@ export function wantsToBook(text: string): boolean {
 
 export function startFlow(seed?: string | null): FlowSession {
   const session: FlowSession = { stage: "service", fields: { website: "" }, reasks: 0, updatedAt: Date.now() };
+  /* A first message that already contains the details must not be thrown away. People
+     write "Mera naam Ahmed hai, DHA Phase 5 mein rehta hun, general service chahiye, kal
+     subah" in one breath; the flow takes everything it can read and asks only for the
+     rest. Identity fields (consent) and the readback are never pre-filled — those stay a
+     human "yes". */
   if (seed) {
     const service = matchService(seed);
-    if (service) {
-      session.fields.service = service;
-      session.stage = "area";
+    if (service) session.fields.service = service;
+
+    const area = normalizeArea(extractArea(seed));
+    if (area?.value) session.fields.area = area.value;
+
+    const { min, max } = dateBounds();
+    const date = extractDate(seed);
+    if (date && date >= min && date <= max) session.fields.preferredDate = date;
+
+    const time = parseTimeInput(seed);
+    if (time) session.fields.timePreference = time;
+
+    const name = extractName(seed);
+    if (name) session.fields.fullName = name;
+
+    const email = parseEmail(seed);
+    if (email) session.fields.email = email;
+
+    const phone = normalizePhone(extractPhone(seed));
+    if (phone) session.fields.phone = phone.e164;
+
+    /* the first step the visitor has NOT already answered is where the flow starts */
+    session.stage = "confirm";
+    for (const stage of ORDER) {
+      if (stage === "consent" || stage === "confirm") {
+        session.stage = "confirm";
+        break;
+      }
+      if (!isFilled(stage, session.fields)) {
+        session.stage = stage;
+        break;
+      }
     }
   }
   return session;
+}
+
+/**
+ * Where does this sentence say an area? Only a *known* area counts here: a first
+ * message is free text, and filling the area step with "general service chahiye"
+ * would be worse than asking for the area.
+ */
+function extractArea(text: string): string {
+  const words = text.replace(/[^A-Za-z0-9 .'#\-]/g, " ").split(/\s+/).filter(Boolean);
+  for (const start of words.keys()) {
+    for (const size of [3, 2, 1]) {
+      const window = words.slice(start, start + size).join(" ");
+      if (window.length < 3) continue;
+      const found = matchArea(window);
+      if (!found) continue;
+      // extend over a following "Phase 5" / "Block 2" so the detail is not lost
+      const after = words.slice(start + size).join(" ");
+      const detail = /^(phase|block|town|scheme)\s*\d{1,2}/i.exec(after);
+      return detail ? `${found.display} ${titleCase(detail[0])}` : found.display;
+    }
+  }
+  const named = /\b(?:area|ilaaqa|eleqa|based in|from)\s+(?:is|hai|hain)?\s*([A-Za-z][A-Za-z0-9.'#\- ]{2,40}?)(?=[.,\n]|$)/i.exec(text);
+  return named ? named[1].trim() : "";
+}
+
+/**
+ * Dates arrive inside sentences ("kal subah theek rahega"), so each clause is tried on
+ * its own. This returns the ISO day itself — the caller must not feed it back through a
+ * parser, because that is how a correctly read "kal" used to come out as nothing.
+ */
+const MONTHS_ABBR = "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?";
+/**
+ * Sentences are noisy — "main DHA Phase 5 mein rehta hun, kal subah" — so the date
+ * words are lifted out and handed to the parser on their own. Parsing the whole
+ * sentence would let an unrelated number ("Phase 5") look like a day, and the first
+ * match would then win; snippet-first cannot make that mistake.
+ */
+function extractDate(text: string): string | null {
+  const lowered = text.toLowerCase();
+  const snippet = new RegExp(
+    `\\b(?:kal|cl|parson|parso|paras|aaj|aj|today|tomorrow|tmrw|tommorow|tomooreow|next week|agle hafta|weekend|haffte|as soon as possible|jaldi se|in \\d{1,2} (?:days?|din)|\\d{1,2}[/-]\\d{1,2}(?:[/-]\\d{2,4})?|\\d{1,2} ?(?:${MONTHS_ABBR})|(?:${MONTHS_ABBR}) ?\\d{1,2})\\b`,
+    "i",
+  ).exec(lowered);
+  return parseDateInput(snippet ? snippet[0].replace(/\s+/g, " ").trim() : lowered.slice(0, 80));
+}
+
+function extractPhone(text: string): string {
+  return (text.match(/(?:\+?\d[\d\s().-]{8,16}\d)/) ?? [""])[0];
+}
+
+function extractName(text: string): string | null {
+  const said = /\b(?:naam|name|main)\s*(?:mera|my)?\s*(?:hu|hun|hoon|hai|hain|is|:)?\s*([A-Za-z][A-Za-z.'\-]{1,20}(?:\s+[A-Za-z][A-Za-z.'\-]{1,20}){0,2})/i.exec(text);
+  const clean = (said?.[1] ?? "").replace(/\b(?:hai|hain|mera|meri|my|rehta|rehni|rheta|based)\b/gi, "").replace(/\s+/g, " ").trim();
+  if (clean.length >= 3 && !/^(ac|area|khana|gahr|service|repair)$/i.test(clean)) return clean;
+  return null;
+}
+
+/** what the flow still has to ask for, given what the first message already said */
+function isFilled(stage: FlowStage, fields: Partial<BookingFields>): boolean {
+  switch (stage) {
+    case "service": return Boolean(fields.service);
+    case "area": return Boolean(fields.area && fields.area.trim().length >= 3);
+    case "date": return Boolean(fields.preferredDate);
+    case "time": return Boolean(fields.timePreference && fields.timePreference !== "flexible");
+    case "name": return Boolean(fields.fullName && fields.fullName.length >= 2);
+    case "email": return Boolean(fields.email && /@/.test(fields.email));
+    case "phone": return Boolean(fields.phone && fields.phone.replace(/\D/g, "").length >= 10);
+    case "notes": return true;
+    default: return false;
+  }
 }
 
 export function progressOf(session: FlowSession) {
@@ -97,6 +201,21 @@ function matchService(text: string): string | undefined {
 
   const exact = bookingServices.find((option) => t.includes(option.value) || t.includes(option.label.toLowerCase()));
   if (exact) return exact.value;
+
+  /* What people actually write for each service, in either language. "AC install
+     chahiye" says install, not "installation or relocation", and the label-word
+     scorer below only matches whole label words — so without this table the flow
+     asks a question the visitor has already answered. */
+  const SAID = [
+    [/\b(install|installation|installing|lagana|lagwana|lagwa|fitting|naya ac|new ac)\b/, "ac-install"],
+    [/\b(gas|leak|refill|charging|charge|dusri? bar|gas ki kami)\b/, "ac-gas"],
+    [/\b(service|servicing|jet|cleaning|wash|washing|maintenance|general checkup)\b/, "ac-service"],
+    [/\b(inverter|board|pcb|amp|trip|current|wiring)\b/, "ac-inverter"],
+    [/\b(duct|ducted|cassette|amc|contract|commercial|shop|office)\b/, "ac-ducted"],
+    [/\b(repair|not cooling|thanda|cooling|noise|awaz|water|pani|drip|leaking|kharab|fault)\b/, "ac-repair"],
+  ] as const;
+  const said = SAID.find(([pattern]) => pattern.test(t));
+  if (said) return said[1];
 
   // A number is the shortest possible answer, and the list is shown numbered.
   const choice = /^\s*(?:option|no\.?|sno\.?|choice)?\s*([1-9])\s*(?:st|nd|rd|th)?\s*$/.exec(t);

@@ -42,7 +42,7 @@ export function validateBooking(fields: Partial<BookingFields>, scope: "project"
     // customer's problem; only genuinely unusable input is refused.
     const normalized = normalizeArea(area);
     const knownArea = normalized !== null;
-    if (!knownArea) errors.area = "Tell us your area of Karachi — “Gulshan-e-Iqbal”, “Korangi” or a five-digit postal code all work."
+    if (!knownArea) errors.area = "Tell us your area of Karachi — “Gulshan-e-Iqbal”, “DHA Phase 5”, “Korangi Block 5” or a five-digit postal code all work."
     const preferredDate = text(fields.preferredDate);
     const { min, max } = dateBounds();
     const parsed = new Date(`${preferredDate}T12:00:00Z`);
