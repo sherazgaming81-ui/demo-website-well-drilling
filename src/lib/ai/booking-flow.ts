@@ -1,5 +1,6 @@
 import { dateBounds, formatDate, validateBooking, type BookingErrors, type BookingFields } from "@/lib/booking";
 import { bookingServices, business } from "@/lib/site-data";
+import { normalizeArea, normalizePhone, parseDateInput, parseTimeInput } from "@/lib/understand";
 import { createBooking, newRequestId } from "@/lib/booking-store";
 
 /**
@@ -109,71 +110,9 @@ function matchService(text: string): string | undefined {
   return best && best.score >= 1 ? best.value : undefined;
 }
 
-const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
-const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-const iso = (d: Date) => d.toISOString().slice(0, 10);
-const addDays = (days: number) => { const d = new Date(); d.setUTCDate(d.getUTCDate() + days); return d; };
-const nextWeekday = (target: number) => { const d = addDays(1); while (d.getUTCDay() !== target) d.setUTCDate(d.getUTCDate() + 1); return d; };
-
-/** Only unambiguous shapes: ISO, "tomorrow", "in 5 days", "next week", month/day,
- *  "Sep 20" / "20 Sep", and weekday names. Anything else is re-asked, not guessed. */
-export function parseDate(text: string): string | null {
-  const t = text.toLowerCase().replace(/(\d)(st|nd|rd|th)/g, "$1").trim();
-  if (!t) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
-  if (t === "tomorrow" || t === "tmrw" || t === "tmr") return iso(addDays(1));
-  if (t === "today") return null; // tomorrow is the earliest we can honour
-  if (t === "next week") return iso(addDays(7));
-  const inDays = t.match(/^in (\d{1,2}) days?$/);
-  if (inDays) return iso(addDays(Number(inDays[1])));
-  const slash = t.match(/^(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?$/);
-  if (slash) {
-    const month = Number(slash[1]); const day = Number(slash[2]);
-    const year = slash[3] ? Number(slash[3].length === 2 ? `20${slash[3]}` : slash[3]) : new Date().getUTCFullYear();
-    return build(year, month, day);
-  }
-  for (let i = 0; i < 12; i++) {
-    const name = MONTHS[i];
-    if (t.includes(name)) {
-      const digits = [...t.matchAll(/\d{1,2}/g)].map((m) => Number(m[0])).filter((n) => n >= 1 && n <= 31);
-      if (!digits.length) return null;
-      const yearHint = t.match(/20\d\d/)?.[0];
-      return build(yearHint ? Number(yearHint) : new Date().getUTCFullYear(), i + 1, digits[0]);
-    }
-  }
-  for (let d = 0; d < 7; d++) {
-    if (t.includes(WEEKDAYS[d])) return iso(nextWeekday(d));
-  }
-  return null;
-}
-
-function build(year: number, month: number, day: number): string | null {
-  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-  const candidate = new Date(Date.UTC(year, month - 1, day));
-  if (candidate.getUTCMonth() !== month - 1 || candidate.getUTCDate() !== day) return null;
-  // A date already past means they meant next year's edition of it.
-  const { min } = dateBounds();
-  if (iso(candidate) < min) return iso(new Date(Date.UTC(year + 1, month - 1, day)));
-  return iso(candidate);
-}
-
-function parseTime(text: string): string | null {
-  const t = text.toLowerCase();
-  if (/\b(flexible|any ?time|whatever|doesn.t matter|no preference|both|either)\b/.test(t)) return "flexible";
-  if (/\b(morning|a\.?m\.?|early|before noon|9|10|11)\b/.test(t) && !/afternoon|p\.m/.test(t)) return "morning";
-  if (/\b(evening|afternoon|raat|p\.?m\.?)\b/.test(t)) return "afternoon";
-  return null;
-}
-
-/** A five-digit Pakistan postal code, or a neighbourhood name typed in words. */
-function parseArea(text: string): string | null {
-  const clean = text.trim().replace(/\s+/g, " ").replace(/^(my area is|area is|i am from|from)\s+/i, "");
-  const digits = clean.replace(/\D/g, "");
-  if (digits.length >= 5) return digits.slice(0, 5);
-  if (/^[A-Za-z][A-Za-z.'\-\s]{2,59}$/.test(clean)) return clean;
-  return null;
-}
-
+/* Dates, day parts, areas and phone numbers are read by src/lib/understand.ts — the
+   same reader the form's validation uses, so "kal" and "korangiiii" cannot mean one
+   thing in chat and another in the form. */
 function parseName(text: string): string | null {
   const clean = text.trim().replace(/\s+/g, " ").replace(/^(my name is|it.s|this is|i am|im)\s+/i, "");
   return clean.length >= 2 && clean.length <= 100 ? clean : null;
@@ -182,13 +121,6 @@ function parseName(text: string): string | null {
 function parseEmail(text: string): string | null {
   const m = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
   return m ? m[0] : null;
-}
-
-function parsePhone(text: string): string | null {
-  const cleaned = text.replace(/[^\d+().\s-]/g, "").trim();
-  const digits = cleaned.replace(/\D/g, "");
-  if (digits.length < 10 || digits.length > 15 || cleaned.length > 32) return null;
-  return cleaned;
 }
 
 function parseConsent(text: string): boolean | null {
@@ -212,9 +144,10 @@ function ask(stage: FlowStage, extra = ""): string {
     case "area":
       return `Which area of ${business.city}? A neighbourhood name or a five-digit postal code both work — that's how we confirm a technician can reach you same-day.`;
     case "date": {
-      const { min, max } = dateBounds();
-      return `Got it. What date suits you? We can look at anything from tomorrow through ${formatDate(max)} — "tomorrow", "next Friday" or "Sep 20" all work.`;
+      const { max } = dateBounds();
+      return `Kaunsa din theek hai? Kal, parson, next Friday ya 12 October — jo likh dein chalta hai. Window: kal se ${formatDate(max)} tak.`;
     }
+
     case "time":
       return "And when suits — morning (9 am–1 pm), evening (4–9 pm), or flexible either way?";
     case "name":
@@ -322,11 +255,13 @@ export async function stepFlow(previous: FlowSession, text: string): Promise<Flo
       return next(session, value === "not-sure" ? "No problem — that's common, and the on-site visit is exactly what clears it up." : "");
     }
     case "area": {
-      const area = parseArea(raw);
-      if (!area) return reask(session, `I need your area — something like "DHA Phase 5", "Gulshan-e-Iqbal" or a five-digit postal code like ${business.postalCode}.`);
-      session.fields.area = area;
+      const area = normalizeArea(raw);
+      if (!area) return reask(session, `Aap ka area? Jaise "DHA Phase 5", "Gulshan-e-Iqbal", "Korangi" — ya five-digit postal code jaise ${business.postalCode}.`);
+      session.fields.area = area.value;
       session.stage = "date";
-      return next(session);
+      // a spelling we fixed is said out loud, so a wrong read is caught here and not
+      // on the phone call three hours later
+      return next(session, area.corrected ? `${area.value} — samajh gaya.` : "");
     }
     case "date": {
       if (/^(no preference|any ?day|anytime|whenever|you choose|no idea)\b/i.test(raw)) {
@@ -335,17 +270,34 @@ export async function stepFlow(previous: FlowSession, text: string): Promise<Flo
         session.stage = "time";
         return next(session, `No problem — I'll put ${formatDate(min)} as a placeholder and the office will agree the real day with you.`);
       }
-      const date = parseDate(raw);
-      if (!date) return reask(session, `I couldn't read that date. Try "tomorrow", "next Friday" or "Sep 20". The window is ${formatDate(dateBounds().min)} to ${formatDate(dateBounds().max)}.`);
+      // "aaj"/"today" is understood perfectly — it just is not something the schedule can
+      // honour, so the nearest real day is taken and said out loud instead of re-asking
+      if (/^(aaj|aj|today|abhi|isi\s+din)\b/i.test(raw.trim())) {
+        const { min } = dateBounds();
+        session.fields.preferredDate = min;
+        session.stage = "time";
+        return next(session, `Aaj sabse pehla slot nahi — ${formatDate(min)} rakh diya. Real din office call par confirm karega.`);
+      }
+      const date = parseDateInput(raw);
+      if (!date)
+        return reask(
+          session,
+          `Date samajh nahi aayi — "kal", "parson", "next Friday", "12 October" ya "12/11" sab chalta hai. Window ${formatDate(dateBounds().min)} se ${formatDate(dateBounds().max)} tak hai.`,
+        );
       const err = errorFor({ ...session.fields, preferredDate: date }, "preferredDate");
-      if (err) return reask(session, err);
+      // the date was read but cannot be booked: say which one was read, and up to when
+      if (err)
+        return reask(
+          session,
+          `${formatDate(date)} window se bahar hai — ${formatDate(dateBounds().min)} se ${formatDate(dateBounds().max)} tak. Us beech ka koi din likhein.`,
+        );
       session.fields.preferredDate = date;
       session.stage = "time";
       return next(session);
     }
     case "time": {
-      const time = parseTime(raw);
-      if (!time) return reask(session, "Morning (8–12), afternoon (12–5), or flexible — which suits you?");
+      const time = parseTimeInput(raw);
+      if (!time) return reask(session, "subah (9 am–1 pm), shaam (4–9 pm), ya flexible — jo chale?");
       session.fields.timePreference = time;
       session.stage = "name";
       return next(session);
@@ -365,9 +317,13 @@ export async function stepFlow(previous: FlowSession, text: string): Promise<Flo
       return next(session);
     }
     case "phone": {
-      const phone = parsePhone(raw);
-      if (!phone) return reask(session, "I need a number with an area code, like (904) 555-0142.");
-      session.fields.phone = phone;
+      const phone = normalizePhone(raw);
+      if (!phone)
+        return reask(
+          session,
+          "Pakistan ka mobile number chahiye — jaise 0300 5550142 ya +92 314 2580054. Karachi landline (021 se shuru) bhi chalega.",
+        );
+      session.fields.phone = phone.e164;
       session.stage = "notes";
       return next(session);
     }

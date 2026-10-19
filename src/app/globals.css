@@ -925,6 +925,12 @@ h1 > span { display: block; white-space: nowrap; }
 .chat-launcher.is-open .chat-launcher-icon { background: var(--ink); color: white; }
 .chat-launcher.is-open .chat-launcher-label { display: none; }
 .chat-launcher.is-nudging { animation: chat-nudge 2.4s ease-in-out 2; }
+/* the count lives on the tab (title + favicon); the launcher only says something
+   arrived, so a red number is not competing with the logo it sits next to */
+.chat-launcher[data-unread] .chat-launcher-icon::after { content: ""; position: absolute; top: 2px; right: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--amber); border: 2px solid var(--paper); }
+.chat-launcher-icon { position: relative; }
+.chat-launcher[data-unread] .chat-launcher-label::after { content: attr(data-unread) " new"; color: var(--amber); font-weight: 700; }
+
 @keyframes chat-nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
 
 .chat-panel {

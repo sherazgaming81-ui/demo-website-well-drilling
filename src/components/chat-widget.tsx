@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { bookingServices, business } from "@/lib/site-data";
+import { useNotify, useTabBadge } from "@/lib/use-notify";
 
 /**
  * The site assistant: one floating box, on the home page only.
@@ -194,6 +195,9 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
   });
   const emojiSearchRef = useRef<HTMLInputElement>(null);
 
+  const { unread, notify, look, soundOn, toggleSound } = useNotify();
+  useTabBadge(unread);
+  const pendingNotify = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -211,6 +215,14 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
   }, []);
 
   useEffect(scrollToEnd, [turns, busy, open, scrollToEnd]);
+
+  /* An answer that lands while the panel is shut (or the tab is in the background)
+     is what deserves a chime and a count — one you are already reading gets neither. */
+  useEffect(() => {
+    if (busy || !pendingNotify.current) return;
+    pendingNotify.current = false;
+    if (!open || document.hidden) notify();
+  }, [busy, open, notify]);
 
   // Keep the tab copy short and current. Written on every change so a reload in the
   // middle of the guided flow lands back on the same step.
@@ -250,14 +262,16 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
   }, [open, menu]);
 
   function closePanel() {
-    abortRef.current?.abort();
-    abortRef.current = null;
+    // Deliberately not aborting: an answer already on its way should finish, land in
+    // the transcript and chime — closing the window is not the same as "stop talking".
+    // The Stop button and Start a new chat are what cancel a stream.
     setMenu("none");
     setOpen(false);
     launcherRef.current?.focus();
   }
 
   function openPanel() {
+    look();
     // Deliberately not auto-resuming: a tab that comes back to a conversation sees the
     // greeting with the last message on it, and chooses. Restoring silently would put
     // words on screen the visitor never asked to see again.
@@ -338,6 +352,7 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
     setBusy(true);
     setNudgeBook(false);
     setMenu("none");
+    pendingNotify.current = true;
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -476,7 +491,14 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
         aria-controls="site-assistant"
         // Below 580px the visible label is display:none, so the button would have
         // no accessible name at all on phones — the label has to exist for assistive tech too.
-        aria-label={open ? "Close the assistant" : "Ask about your AC"}
+        data-unread={unread > 0 ? String(unread) : undefined}
+        aria-label={
+          open
+            ? "Close the assistant"
+            : unread > 0
+              ? `Ask about your AC — ${unread} new ${unread === 1 ? "reply" : "replies"}`
+              : "Ask about your AC"
+        }
         onClick={() => (open ? closePanel() : openPanel())}
       >
         <span className="chat-launcher-icon" aria-hidden="true">
@@ -525,6 +547,10 @@ export function ChatWidget({ onBook }: { onBook: (serviceId?: string) => void })
                     <button type="button" role="menuitem" onClick={downloadTranscript} disabled={turns.length === 0}>
                       <Icon name="download" size={14} />
                       Download transcript
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => { toggleSound(); setMenu("none"); }}>
+                      <Icon name={soundOn ? "bell" : "bell-off"} size={14} />
+                      {soundOn ? "Turn reply chime off" : "Turn reply chime on"}
                     </button>
                     <button type="button" role="menuitem" onClick={startNewChat} disabled={turns.length === 0}>
                       <Icon name="close" size={14} />

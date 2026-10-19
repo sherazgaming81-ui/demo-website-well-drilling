@@ -359,7 +359,7 @@ const UNSAID = `Is baar jawab tayyar nahi ho saka — dobara poochein, ya office
 function unavailable(): Response {
   return Response.json(
     {
-      error: `The assistant can't reach the workshop's answer service right now, so I would rather say that than guess. Call ${business.phoneDisplay} — the office takes the same details — or use the inspection request on this page and we will pick it up from there.`,
+      error: `Is baar jawab tayyar nahi ho saka — answer service abhi reachable nahi hai, aur main guess nahi karunga. Dobara try karein, ${business.phoneDisplay} par call kar lein, ya is page ka inspection form bhar dein — office wahi details le kar aage badha dega.`,
     },
     { status: 503, headers: { "Cache-Control": "no-store" } },
   );

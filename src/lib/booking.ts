@@ -1,4 +1,5 @@
 import { bookingServices } from "@/lib/site-data";
+import { normalizeArea, normalizePhone } from "@/lib/understand";
 
 export type BookingFields = {
   service: string;
@@ -37,8 +38,11 @@ export function validateBooking(fields: Partial<BookingFields>, scope: "project"
   if (scope !== "contact") {
     if (!bookingServices.some((service) => service.value === fields.service)) errors.service = "Please choose a service.";
     const area = text(fields.area);
-    const knownArea = /^\d{5}$/.test(area) || /^[A-Za-z][A-Za-z.'\-\s]{2,59}$/.test(area);
-    if (!knownArea) errors.area = "Tell us your area — “Gulshan-e-Iqbal” or a five-digit postal code both work.";
+    // Read through understand.ts, so a stuck key or a second language is not the
+    // customer's problem; only genuinely unusable input is refused.
+    const normalized = normalizeArea(area);
+    const knownArea = normalized !== null;
+    if (!knownArea) errors.area = "Tell us your area of Karachi — “Gulshan-e-Iqbal”, “Korangi” or a five-digit postal code all work."
     const preferredDate = text(fields.preferredDate);
     const { min, max } = dateBounds();
     const parsed = new Date(`${preferredDate}T12:00:00Z`);
@@ -53,8 +57,11 @@ export function validateBooking(fields: Partial<BookingFields>, scope: "project"
     const phone = text(fields.phone);
     if (name.length < 2 || name.length > 100) errors.fullName = "Enter your full name (2–100 characters).";
     if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = "Enter a valid email address.";
-    const digits = phone.replace(/\D/g, "");
-    if (!/^[+\d().\s-]+$/.test(phone) || digits.length < 10 || digits.length > 15 || phone.length > 32) errors.phone = "Enter a reachable number, like 0300 555 0142.";
+    // Pakistani numbers only: this office dials from Karachi, and a number it cannot
+    // reach is worse than no number at all.
+    if (!normalizePhone(phone)) {
+      errors.phone = "Enter a Pakistani mobile number — 0300 5550142, 0314 2580054 or +92 314 2580054. A Karachi landline (021 …) works too.";
+    }
     if (typeof fields.notes !== "string" || fields.notes.length > 1500) errors.notes = "Please keep your message under 1,500 characters.";
     if (fields.consent !== true) errors.consent = "Please agree so we can respond to your request.";
   }

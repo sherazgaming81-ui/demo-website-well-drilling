@@ -9,7 +9,7 @@ const valid = {
   timePreference: "morning",
   fullName: "Alex Demo",
   email: `freeze-lead-${Date.now()}@example.com`,
-  phone: "(919) 555-0142",
+  phone: "0314 2580054",
   notes: "Automated demonstration request. No real customer or appointment.",
   consent: true,
   website: "",

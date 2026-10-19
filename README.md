@@ -44,6 +44,9 @@ Design and motion live in `src/app/globals.css`:
 - **one surface**: the floating box on the home page. There used to be a `/assistant` page for
   long answers; it is gone, and `Expand window` in the panel's ⋯ menu does that job in place —
   one widget, so behaviour and validation cannot exist in two versions
+- an answer that lands while the panel is closed behaves like a message: the tab title gets a count,
+  the favicon is badged from the app icon on a canvas, the launcher shows a dot, and a two-note WebAudio
+  chime plays — no audio file shipped, and `Turn reply chime off` in the ⋯ menu stores that one preference
 - the panel opens on a greeting (*Hi there 👋 / How can we help?*), one line of what to ask and
   **no** suggested-question buttons — a chat that opens with four prompts reads like a menu. Then the
   transcript: bubbles with a `Freeze Point · AI assistant · just now` line under each answer, a
@@ -61,6 +64,11 @@ Design and motion live in `src/app/globals.css`:
 - a reply that turns out to be the model talking to itself ("I should keep this brief…") is dropped and
   replaced with an honest one-liner — `sanitize.ts` judges the head, every line and every sentence of the
   answer, and keeps real replies that merely start with "I will check the capacitor first"
+- what a visitor *types* is read by `src/lib/understand.ts`, which both the chat and the form use:
+  `kal`, `parson`, `tomooreow`, `agle hafta`, `12 nov`, `20/11`, `in 3 din`, `somwar`, `jaldi se`, a bare
+  `5`, `subah` for the morning window; `korangiiii` is saved as **Korangi** and said back, an area nobody
+  has a page for is kept rather than refused, and phone numbers must be Pakistani (`03X…` or `+92 3X…`,
+  `021` landline) — they are stored as E.164 so the WhatsApp link and the job card cannot disagree
 - the guided booking is a deterministic ten-step flow (`src/lib/ai/booking-flow.ts`): no model parses a phone number or a date, each answer is checked with the same `validateBooking()` the form uses, and the whole request is read back for confirmation before it is sent
 - `src/lib/ai/sanitize.ts` is the safety net: an invented price or a narration of the model's reasoning never reaches a visitor, and markdown is flattened because the bubble is plain text
 - requests carry `chat_template_kwargs: { thinking: false }`, verified against the gateway to suppress the `reasoning` field entirely
@@ -113,7 +121,7 @@ npm run check:deploy                                   # against a deployed URL
 node scripts/make-og.mjs                                 # rebuilds public/og.jpg from site-data + real fonts
 ```
 
-`smoke-test.mjs` (41 checks) walks the journey in Chromium: every image must decode with no 404, the marquee and contour motion must run, an estimate must complete through the chat UI and return an `FP-########` reference, the desktop panel must hold still through a long reply and a stage change and must not clip its own composer at 720/660/600/540px of height, the greeting must not invent a history, the option menu must resize / download / clear for real,
+`smoke-test.mjs` (43 checks) walks the journey in Chromium: every image must decode with no 404, the marquee and contour motion must run, an estimate must complete through the chat UI and return an `FP-########` reference, the desktop panel must hold still through a long reply and a stage change and must not clip its own composer at 720/660/600/540px of height, the greeting must not invent a history, the option menu must resize / download / clear for real,
   and a real answer must come back short, list-free and in the language the question was asked in, ten widths from 1600px to 320px must show no overflow and no clipped text, phones must get no decorative loops, `prefers-reduced-motion` must show everything with animation off, and the run must end with zero console errors and zero failed requests.
 
 `scripts/make-og.mjs` renders the 1200x630 share card in Chromium from the same `site-data.ts` (it asserts the two web fonts and

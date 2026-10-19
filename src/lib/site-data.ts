@@ -265,6 +265,33 @@ export const serviceAreas = [
   },
 ] as const;
 
+/**
+ * Every locality a Karachi customer might type, with the spellings people actually use.
+ * The area pages above are the six we write about; this list is only used to read an
+ * answer back correctly ("korangiiii" → "Korangi"), so a visitor is never told their own
+ * neighbourhood is invalid. Names are illustrative for this demo brand.
+ */
+export const karachiAreas = [
+  { name: "Clifton", aliases: ["block 1", "block 2", "block 4", "block 5", "block 8", "block 9", "boat basin", "khyaban-e-ittahad", "khiaban-e-ittahad"] },
+  { name: "DHA", aliases: ["defence", "defence housing", "dha phase 4", "dha phase 5", "dha phase 6", "dha phase 7", "dha phase 8"] },
+  { name: "Gulshan-e-Iqbal", aliases: ["gulshan", "gulshan iqbal", "gulshan e iqbal", "block 5", "block 6", "block 7", "block 10", "block 13", "university road", "shahrah-e-noor"] },
+  { name: "North Nazimabad", aliases: ["nazimabad", "north nazim abad", "block 1", "block 4", "block 7", "safoora", "larknose"] },
+  { name: "Malir", aliases: ["malir cantt", "malir city", "rashid minhas", "gulzar-e-meherban", "jinnah garden", "kda chorsahi"] },
+  { name: "Saddar", aliases: ["bolton market", "maryam road", "zainab chowk", "new charkadan", "kharadar", "mithadar"] },
+  { name: "Korangi", aliases: ["korangi town", "korangi industrial", "site", "site area", "shah faisal colony", "landhi", "landhhi", "korangi block 5", "gulzar-e-hijri", "mahmabad"] },
+  { name: "PECHS", aliases: ["pechhs", "rasool bakery", "shahbaz khoro", "kda scheme 1", "sr-iii"] },
+  { name: "Gulistan-e-Johar", aliases: ["johar", "gulistan johar", "block 12", "d10", "maripur road"] },
+  { name: "Bahadurabad", aliases: ["yousuf bhandu road", "m.a.jinnah road", "mominabad"] },
+  { name: "Federal B Area", aliases: ["federal b", "f b area", "faisal block", "saddar federal b"] },
+  { name: "Tariq Road", aliases: ["tariq rd", "bus adda", "regal" ] },
+  { name: "Askari", aliases: ["askari 1", "askari 2", "askari 5", "dha askari"] },
+  { name: "Firdous", aliases: ["firdous market", "khyaban-e-jinnah"] },
+  { name: "Shahrah-e-Faisal", aliases: ["shahrah e faisal", "shraah-e-faisal", "nur bazar", "cantonment", "cantt", "karsaz"] },
+  { name: "Lyari", aliases: ["lyari nadi", "bhainta colony", "gagar", "machar colony", "united chowrangi"] },
+  { name: "Gizri", aliases: ["gizri block 3", "gulshan gizri"] },
+  { name: "Orangi", aliases: ["orangi town", "saddar orangi", "mangoopir"] },
+] as const;
+
 /** Job-site photography for the work gallery. */
 export const projects = [
   { image: "/images/work-van.jpg", alt: "Freeze Point service pickup staged for a Karachi call-out", caption: "Clifton · morning call-out" },

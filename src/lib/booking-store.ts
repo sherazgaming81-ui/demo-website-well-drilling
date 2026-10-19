@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { validateBooking, type BookingErrors, type BookingFields } from "@/lib/booking";
+import { normalizeArea, normalizePhone } from "@/lib/understand";
 import { bookingServices, business } from "@/lib/site-data";
 
 /**
@@ -25,6 +26,22 @@ const globalForStore = globalThis as typeof globalThis & {
 
 const byRequestId = (globalForStore.__leadStoreByRequest ??= new Map<string, StoredBooking>());
 const byEmail = (globalForStore.__leadStoreByEmail ??= new Map<string, number[]>());
+
+/**
+ * Both front doors (the form and the chat) land here, so cleaning happens once:
+ * "korangiiii" becomes Korangi and any Pakistani number becomes +92… before it is
+ * validated, stored or forwarded. The office therefore never reads a typo, and the
+ * reference the visitor keeps matches what the workshop sees.
+ */
+function canonicalize(fields: BookingFields): BookingFields {
+  const area = normalizeArea(fields.area ?? "");
+  const phone = normalizePhone(fields.phone ?? "");
+  return {
+    ...fields,
+    ...(area ? { area: area.value } : {}),
+    ...(phone ? { phone: phone.e164 } : {}),
+  };
+}
 
 export type BookingOutcome =
   | { ok: true; reference: string; created: boolean; status: 200 | 201 }
@@ -66,7 +83,7 @@ async function forward(lead: Record<string, unknown>) {
  * `fields.website` is the honeypot; a bogus/missing requestId is rejected.
  */
 export async function createBooking(input: Partial<BookingFields>, requestIdHint?: string): Promise<BookingOutcome> {
-  const fields = { ...input } as BookingFields;
+  const fields = canonicalize(input as BookingFields);
 
   if (typeof fields.requestId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(fields.requestId)) {
     return { ok: false, status: 400, error: "Please reopen the booking form and try again." };

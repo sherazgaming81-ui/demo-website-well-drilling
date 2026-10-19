@@ -138,7 +138,12 @@ try {
 
   await page.getByRole("button", { name: "Chat options" }).click();
   const menu = await page.evaluate(() => [...document.querySelectorAll(".chat-menu [role='menuitem']")].map((b) => b.innerText.trim()));
-  assert.deepEqual(menu.map((m) => m.toLowerCase()), ["expand window", "download transcript", "start a new chat"]);
+  assert.deepEqual(menu.map((m) => m.toLowerCase()), [
+    "expand window",
+    "download transcript",
+    "turn reply chime off",
+    "start a new chat",
+  ]);
   const narrow = await page.evaluate(() => Math.round(document.querySelector(".chat-panel").getBoundingClientRect().width));
   await page.getByRole("menuitem", { name: /expand window/i }).click();
   const wide = await page.evaluate(() => Math.round(document.querySelector(".chat-panel").getBoundingClientRect().width));
@@ -148,7 +153,11 @@ try {
   await page.getByRole("button", { name: "Chat options" }).click();
   const disabledNow = await page.evaluate(() =>
     [...document.querySelectorAll(".chat-menu [role='menuitem']")].map((b) => `${b.innerText.trim()}:${b.disabled}`));
-  assert.deepEqual(disabledNow, ["Shrink window:false", "Download transcript:true", "Start a new chat:true"], disabledNow.join(", "));
+  assert.deepEqual(
+    disabledNow,
+    ["Shrink window:false", "Download transcript:true", "Turn reply chime off:false", "Start a new chat:true"],
+    disabledNow.join(", "),
+  );
   // shrink again, so every later measurement of the panel is of its default size
   await page.getByRole("menuitem", { name: /shrink window/i }).click();
   const back = await page.evaluate(() => Math.round(document.querySelector(".chat-panel").getBoundingClientRect().width));
@@ -215,6 +224,46 @@ try {
   const composer = await page.evaluate(() => [...document.querySelectorAll(".chat-input button")].map((b) => b.getAttribute("aria-label")));
   assert.deepEqual(composer.filter((n) => n && !/emoji|send|stop/i.test(n)), [], `the composer offers buttons it cannot back up: ${composer.join(", ")}`);
   ok("Composer is text + emoji + send only — no attachment or voice control");
+
+  /* A reply that lands while the panel is shut has to behave like a message: the tab
+     counts it, the icon gets a dot, the chime fires once, and looking at it clears all
+     three. Headless Chromium cannot hear audio, so what is asserted is that the
+     notification actually fired (the counter the launcher reads) plus the visuals. */
+  const titleBefore = await page.title();
+  await page.getByRole("textbox", { name: "Your question" }).fill("Kal subah aa sakte ho?");
+  await page.getByRole("button", { name: "Send your question" }).click();
+  await page.getByRole("button", { name: "Close chat" }).click();
+  await page.waitForFunction(() => /^\(\d+\) Freeze Point/.test(document.title), null, { timeout: 120000 });
+  const badge = await page.evaluate(() => ({
+    title: document.title,
+    unread: document.querySelector(".chat-launcher")?.getAttribute("data-unread") ?? null,
+    pings: Number(document.documentElement.dataset.chatPing ?? 0),
+    icon: document.querySelector('link[rel~="icon"]')?.getAttribute("href")?.slice(0, 16) ?? "",
+  }));
+  assert.match(badge.title, /^\(1\) Freeze Point/, `tab title reads ${JSON.stringify(badge.title)}`);
+  assert.equal(badge.unread, "1", `the launcher dot says ${badge.unread}`);
+  assert.ok(badge.pings >= 1, "no notification fired for a reply that landed while the panel was closed");
+  assert.match(badge.icon, /^data:image\/png/, `the favicon was not badged (href ${badge.icon})`);
+  await page.getByRole("button", { name: /Ask about your AC — 1 new reply/ }).click();
+  await page.waitForTimeout(300);
+  const afterLook = await page.evaluate(() => ({
+    title: document.title,
+    unread: document.querySelector(".chat-launcher")?.getAttribute("data-unread") ?? null,
+    icon: document.querySelector('link[rel~="icon"]')?.getAttribute("href") ?? "",
+  }));
+  assert.equal(afterLook.unread, null, "the dot survived being looked at");
+  assert.equal(afterLook.title, titleBefore, `the tab title stayed ${JSON.stringify(afterLook.title)}`);
+  assert.ok(!afterLook.icon.startsWith("data:"), "the badged favicon was not restored");
+  ok(`Reply in the background: tab counted it (${badge.title.slice(0, 4)}…), favicon badged, chime fired ${badge.pings}×, looking cleared all three`);
+
+  // the chime is opt-out from the same menu, and the choice survives a reload
+  await page.getByRole("button", { name: "Chat options" }).click();
+  await page.getByRole("menuitem", { name: /turn reply chime off/i }).click();
+  assert.equal(await page.evaluate(() => localStorage.getItem("freezepoint.notify-sound.v1")), "off", "the chime choice did not persist");
+  await page.getByRole("button", { name: "Chat options" }).click();
+  await page.getByRole("menuitem", { name: /turn reply chime on/i }).click();
+  assert.equal(await page.evaluate(() => localStorage.getItem("freezepoint.notify-sound.v1")), "on", "the chime could not be turned back on");
+  ok("Reply chime can be switched off and on from the menu, and the choice persists");
 
   await page.getByRole("button", { name: "Close chat" }).click();
   await page.waitForTimeout(250);
@@ -292,7 +341,7 @@ try {
   }
   // an answer is judged as an answer unless it is our own honest failure line; a
   // mid-stream hiccup that still delivered prose should be style-checked, not excused
-  const honestFailure = /^(?:Is baar jawab tayyar nahi|Sorry .{0,40}lost that reply)/i;
+  const honestFailure = /^(?:Is baar jawab tayyar nahi|Sorry .{0,40}lost that reply|The assistant can.t reach)/i;
   const gotAnswer = asked.settled && asked.text.length > 12 && !honestFailure.test(asked.text);
   if (gotAnswer) {
     const words = asked.text.split(/\s+/).filter(Boolean).length;
@@ -516,7 +565,13 @@ try {
   await answer("skip");
   await answer("yes you have it");
   const readback = await page.locator(".chat-row-assistant .chat-bubble").last().innerText();
-  assert.match(readback, /Here's what I've got/);
+  // when this fails, the useful question is which step the flow was actually on —
+  // without it, a "readback missing" failure means digging through the server log
+  const trail = await page.evaluate(() => ({
+    stage: document.querySelector(".chat-panel")?.dataset.stage ?? "?",
+    last: [...document.querySelectorAll(".chat-row-assistant .chat-bubble")].slice(-3).map((el) => el.textContent.trim().slice(0, 60)),
+  }));
+  assert.match(readback, /Here's what I've got/, `flow was on stage=${trail.stage}; last replies: ${trail.last.join(" / ")}`);
   assert.match(readback, /Service:|Area:|Preferred date:/);
   await answer("yes, send it");
   const bookedRef = (await page.locator(".chat-booked-ref").innerText().catch(() => "")).trim();
