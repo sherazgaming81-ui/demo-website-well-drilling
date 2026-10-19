@@ -290,7 +290,10 @@ try {
     await page.waitForTimeout(3000); // the gateway is metered; let the retry breathe
     asked = await askAnew(HINGLISH_Q);
   }
-  const gotAnswer = asked.settled && !asked.errored && asked.text.length > 12;
+  // an answer is judged as an answer unless it is our own honest failure line; a
+  // mid-stream hiccup that still delivered prose should be style-checked, not excused
+  const honestFailure = /^(?:Is baar jawab tayyar nahi|Sorry .{0,40}lost that reply)/i;
+  const gotAnswer = asked.settled && asked.text.length > 12 && !honestFailure.test(asked.text);
   if (gotAnswer) {
     const words = asked.text.split(/\s+/).filter(Boolean).length;
     const listy = /^\s*(?:[-*\u2022]|\d+[.)])\s/m.test(asked.text);
