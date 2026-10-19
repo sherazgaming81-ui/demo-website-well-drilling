@@ -1,6 +1,6 @@
 # Freeze Point AC Care — demonstration site
 
-A marketing site for a fictional Karachi air-conditioning company — a home page, an assistant page and a page per service area, built to demonstrate design, motion and a working AI intake flow, built to demonstrate design, motion and a working AI intake flow — not a live business. The brand, phone numbers, address, figures and photography are illustrative; the footer and the privacy dialog say so on purpose. Change the one content file below and it becomes a real company's site.
+A marketing site for a fictional Karachi air-conditioning company — a home page plus a page per service area, built to demonstrate design, motion and a working AI intake flow — not a live business. The brand, phone numbers, address, figures and photography are illustrative; the footer and the privacy dialog say so on purpose. Change the one content file below and it becomes a real company's site.
 
 **Stack:** Next.js 16 (App Router) · React 19 · TypeScript · hand-written CSS. No UI framework, no database, no analytics, no new dependencies for the assistant.
 
@@ -35,6 +35,17 @@ Design and motion live in `src/app/globals.css`:
 
 - `POST /api/chat` streams SSE and never dead-ends: each model is tried in order, and if all of them fail or none is configured, the offline knowledge base answers — **including a completed booking**
 - `GET /api/chat` reports what is wired up, without exposing keys
+- **one surface**: the floating box on the home page. There used to be a `/assistant` page for
+  long answers; it is gone, and `Expand window` in the panel's ⋯ menu does that job in place —
+  one widget, so behaviour, validation and the offline fallback cannot exist in two versions
+- the panel opens on a greeting (*Hi there 👋 / How can we help?*) with four starters, then the
+  transcript: bubbles with a `Freeze Point · AI assistant · just now` line under each answer,
+  an emoji button, and deliberately **no** attachment or voice control — a paperclip that cannot
+  receive a file is a dead end, which is the one thing this widget is not allowed to be
+- the conversation is kept in `sessionStorage` (`freezepoint.chat.v1`) with its `sessionId`, so a
+  reload offers the last message back on a *Recent message* card instead of dumping a half-finished
+  booking on the floor. Nothing is sent by it, it dies with the tab, and `Start a new chat` clears
+  it; the privacy dialog says exactly this
 - the guided booking is a deterministic ten-step flow (`src/lib/ai/booking-flow.ts`): no model parses a phone number or a date, each answer is checked with the same `validateBooking()` the form uses, and the whole request is read back for confirmation before it is sent
 - `src/lib/ai/sanitize.ts` is the safety net: an invented price or a narration of the model's reasoning never reaches a visitor, and markdown is flattened because the bubble is plain text
 - requests carry `chat_template_kwargs: { thinking: false }`, verified against the gateway to suppress the `reasoning` field entirely
@@ -87,7 +98,7 @@ npm run check:deploy                                   # against a deployed URL
 node scripts/make-og.mjs                                 # rebuilds public/og.jpg from site-data + real fonts
 ```
 
-`smoke-test.mjs` (31 checks) walks the journey in Chromium: every image must decode with no 404, the marquee and contour motion must run, an estimate must complete through the chat UI and return an `FP-########` reference, the desktop panel must hold still through a long reply and a chip row, ten widths from 1600px to 320px must show no overflow and no clipped text, phones must get no decorative loops, `prefers-reduced-motion` must show everything with animation off, and the run must end with zero console errors and zero failed requests.
+`smoke-test.mjs` (38 checks) walks the journey in Chromium: every image must decode with no 404, the marquee and contour motion must run, an estimate must complete through the chat UI and return an `FP-########` reference, the desktop panel must hold still through a long reply and a chip row, the greeting must not invent a history and the option menu must resize / download / clear for real, ten widths from 1600px to 320px must show no overflow and no clipped text, phones must get no decorative loops, `prefers-reduced-motion` must show everything with animation off, and the run must end with zero console errors and zero failed requests.
 
 `scripts/make-og.mjs` renders the 1200x630 share card in Chromium from the same `site-data.ts` (it asserts the two web fonts and
 both images actually loaded, because a silently-fallback OG card is exactly the kind of thing that ships broken), then downsamples

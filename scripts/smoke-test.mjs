@@ -96,6 +96,65 @@ try {
   }
   assert.match(chrome, /Freeze Point Assistant/);
   ok("Assistant chrome is fully on-niche (title, greeting, placeholder)");
+
+  // The greeting screen: what it says, the four starters, and the option menu —
+  // each item of the menu has to actually do something, so each is measured.
+  const greet = await page.evaluate(() => {
+    const panel = document.querySelector(".chat-panel");
+    return {
+      lead: panel.querySelector(".chat-greet h2")?.innerText ?? "",
+      hi: panel.querySelector(".chat-greet-hi")?.innerText ?? "",
+      starters: [...panel.querySelectorAll(".chat-starters button")].map((b) => b.innerText.trim()),
+      recent: Boolean(panel.querySelector(".chat-recent")),
+      log: Boolean(panel.querySelector(".chat-log")),
+      bubble: Boolean(panel.querySelector(".chat-row-assistant .chat-bubble")),
+    };
+  });
+  assert.match(greet.lead, /How can we help\?/i);
+  assert.match(greet.hi, /Hi there/);
+  assert.equal(greet.starters.length, 4, `expected 4 starter buttons, got ${greet.starters.length}`);
+  assert.equal(greet.recent, false, "a fresh visitor must not be shown a previous message they never had");
+  assert.equal(greet.log, false, "the empty state should not render a transcript at all");
+  assert.equal(greet.bubble, false, "the old greeting bubble came back — the screen replaced it");
+  const startersLive = await page.evaluate(() => [...document.querySelectorAll(".chat-starters button")].every((b) => !b.disabled));
+  assert.equal(startersLive, true, "a starter button is not clickable");
+  ok(`Greeting screen: "${greet.hi}" → "${greet.lead}" with 4 starters, no fake history, no leftover bubble`);
+
+  await page.getByRole("button", { name: "Chat options" }).click();
+  const menu = await page.evaluate(() => [...document.querySelectorAll(".chat-menu [role='menuitem']")].map((b) => b.innerText.trim()));
+  assert.deepEqual(menu.map((m) => m.toLowerCase()), ["expand window", "download transcript", "start a new chat"]);
+  const narrow = await page.evaluate(() => Math.round(document.querySelector(".chat-panel").getBoundingClientRect().width));
+  await page.getByRole("menuitem", { name: /expand window/i }).click();
+  const wide = await page.evaluate(() => Math.round(document.querySelector(".chat-panel").getBoundingClientRect().width));
+  assert.ok(wide > narrow + 120, `Expand window only moved ${wide - narrow}px (${narrow} → ${wide})`);
+  // Nothing to save and nothing to clear yet, so both items must say so instead of
+  // firing an empty download — a dead button is the one thing this widget bans.
+  await page.getByRole("button", { name: "Chat options" }).click();
+  const disabledNow = await page.evaluate(() =>
+    [...document.querySelectorAll(".chat-menu [role='menuitem']")].map((b) => `${b.innerText.trim()}:${b.disabled}`));
+  assert.deepEqual(disabledNow, ["Shrink window:false", "Download transcript:true", "Start a new chat:true"], disabledNow.join(", "));
+  // shrink again, so every later measurement of the panel is of its default size
+  await page.getByRole("menuitem", { name: /shrink window/i }).click();
+  const back = await page.evaluate(() => Math.round(document.querySelector(".chat-panel").getBoundingClientRect().width));
+  assert.equal(back, narrow, `Shrink window did not give the default width back (${back} vs ${narrow})`);
+  ok(`Option menu works: Expand widens the panel ${narrow}px → ${wide}px (transcript + new chat wired to real actions)`);
+
+  await page.getByRole("button", { name: "Add an emoji" }).click();
+  const picked = await page.evaluate(() => document.querySelectorAll(".chat-emoji button").length);
+  assert.ok(picked >= 8, `emoji picker showed ${picked} entries`);
+  await page.locator(".chat-emoji button").first().click();
+  const withEmoji = await page.getByRole("textbox", { name: "Your question" }).inputValue();
+  assert.match(withEmoji, /\S/, "clicking an emoji did not reach the input");
+  await page.getByRole("textbox", { name: "Your question" }).fill("");
+  assert.equal(await page.evaluate(() => Boolean(document.querySelector(".chat-emoji"))), false, "the picker stayed open after picking");
+  ok(`Emoji button works (${picked} faces, inserting into the field, closing after)`);
+
+  // No file picker and no microphone: the composer offers exactly one tool besides
+  // sending, because that is all this chat can act on.
+  const composer = await page.evaluate(() => [...document.querySelectorAll(".chat-input button")].map((b) => b.getAttribute("aria-label")));
+  assert.deepEqual(composer.filter((n) => n && !/emoji|send|stop/i.test(n)), [], `the composer offers buttons it cannot back up: ${composer.join(", ")}`);
+  ok("Composer is text + emoji + send only — no attachment or voice control");
+
   await page.getByRole("button", { name: "Close chat" }).click();
   await page.waitForTimeout(250);
 
@@ -113,6 +172,8 @@ try {
     return { head: text.slice(0, 24), tagLeak: /think/.test(panel.innerText) };
   });
   assert.equal(firstWords.tagLeak, false, "a model tag reached the visible chat");
+  const metaLine = await page.evaluate(() => document.querySelector(".chat-row-assistant .chat-meta")?.innerText ?? "");
+  assert.match(metaLine, /Freeze Point · AI assistant · (just now|\d+[mh] ago)/, `attribution line reads ${JSON.stringify(metaLine)}`);
   // an eaten leading character shows up as a lowercase or clipped start; model
   // phrasing itself is not what this guards
   assert.match(firstWords.head.trim(), /^[A-Z]/, `answer begins mid-word: ${firstWords.head}`);
@@ -357,30 +418,70 @@ try {
   assert.equal(geometry.overflow, 0, "the assistant adds horizontal overflow on desktop");
   ok(`Desktop assistant is roomy (${geometry.width}px, panel fully on screen, log scrolls)`);
 
-  // The standalone page.
-  await page.goto(`${baseURL}/assistant`, { waitUntil: "domcontentloaded" });
+  // There is one assistant surface now. The route has to be gone, not an empty shell,
+  // and nothing on the site may still point at it.
+  const gone = await page.request.get(`${baseURL}/assistant`);
+  assert.equal(gone.status(), 404, `/assistant answers ${gone.status()} — the page was meant to be deleted`);
+  const dangling = await page.evaluate(() => [...document.querySelectorAll("a[href=\"/assistant\"]")].length);
+  assert.equal(dangling, 0, `${dangling} link(s) still point at the deleted assistant page`);
+  ok("/assistant is deleted (404) and no link on the page still references it");
+
+  // Reload with a conversation behind it: the greeting must offer it back, and only
+  // hand it over when the visitor takes it.
+  await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForTimeout(400);
-  assert.equal(await page.getByRole("heading", { name: "Ask the assistant" }).count(), 1);
-  const pageGeom = await page.evaluate(() => {
-    const panel = document.querySelector(".chat-panel.is-page");
-    if (!panel) return null;
-    const r = panel.getBoundingClientRect();
-    return { width: Math.round(r.width), overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+  await page.getByRole("button", { name: "Ask about your AC" }).click();
+  await page.getByRole("dialog", { name: /assistant/i }).waitFor({ state: "visible", timeout: 8000 });
+  const resume = await page.evaluate(() => {
+    const card = document.querySelector(".chat-recent");
+    return {
+      card: Boolean(card),
+      line: card?.querySelector(".chat-recent-line")?.innerText ?? "",
+      label: card?.querySelector(".chat-recent-top strong")?.innerText ?? "",
+      bubbles: document.querySelectorAll(".chat-bubble").length,
+    };
   });
-  assert.ok(pageGeom && pageGeom.width >= 700, `assistant page panel is only ${pageGeom?.width}px wide`);
-  assert.equal(pageGeom?.overflow, 0, "the assistant page overflows horizontally");
-  await page.getByRole("textbox", { name: "Your question" }).fill("Do you cover Clifton?");
-  await page.getByRole("button", { name: "Send your question" }).click();
-  await settle();
-  const pageAnswerStatus = await page.evaluate(() => ({
-    pending: Boolean(document.querySelector(".chat-typing")),
-    count: document.querySelectorAll(".chat-row-assistant .chat-bubble").length,
-    rate: window.__lastChatStatus,
+  assert.equal(resume.card, true, "a reload lost the recent-message card");
+  assert.match(resume.label, /recent message/i);
+  assert.ok(resume.line.length > 20, `the card preview is empty — got ${JSON.stringify(resume.line)}`);
+  assert.equal(resume.bubbles, 0, "the transcript came back before it was asked for");
+  await page.screenshot({ path: "artifacts/assistant-greeting.png" });
+  await page.locator(".chat-recent").click();
+  const restored = await page.evaluate(() => ({
+    bubbles: document.querySelectorAll(".chat-row-assistant .chat-bubble").length,
+    greet: Boolean(document.querySelector(".chat-greet")),
+    log: Boolean(document.querySelector(".chat-log")),
   }));
-  const onPage = await page.locator(".chat-row-assistant .chat-bubble").last().innerText();
-  assert.ok(onPage.length > 30, `the assistant page did not answer — got ${JSON.stringify(onPage.slice(0, 120))} / status=${pageAnswerStatus}`);
-  await page.screenshot({ path: "artifacts/assistant-page.png" });
-  ok(`Assistant page works on its own (${pageGeom.width}px panel, answered in ${onPage.split(" ").length} words)`);
+  assert.ok(restored.bubbles >= 2, `picking the chat back up restored ${restored.bubbles} answers`);
+  assert.equal(restored.greet, false, "the greeting screen stayed after resuming");
+  assert.equal(restored.log, true, "no transcript rendered after resuming");
+  ok(`Reload hands the chat back through the card, on request (${restored.bubbles} assistant turns restored)`);
+
+  await page.getByRole("button", { name: "Chat options" }).click();
+  const [chatDownload] = await Promise.all([
+    page.waitForEvent("download", { timeout: 15000 }),
+    page.getByRole("menuitem", { name: /download transcript/i }).click(),
+  ]);
+  const savedTo = await chatDownload.path();
+  const file = await import("node:fs/promises").then((fs) => fs.readFile(savedTo, "utf8"));
+  assert.match(chatDownload.suggestedFilename(), /^Freeze Point-chat-\d{4}-\d{2}-\d{2}\.txt$/);
+  assert.match(file, /Freeze Point AC Care — chat transcript/);
+  assert.match(file, /^You · \d{2}:\d{2}$/m);
+  assert.match(file, /FP-[A-F0-9]{8}|No request was submitted/, "the transcript neither carries the reference nor says there is none");
+  ok(`Transcript downloads as a real file (${chatDownload.suggestedFilename()}, ${file.split("\n").length} lines, reference included)`);
+
+  await page.getByRole("button", { name: "Chat options" }).click();
+  await page.getByRole("menuitem", { name: /start a new chat/i }).click();
+  const wiped = await page.evaluate(() => ({
+    bubbles: document.querySelectorAll(".chat-bubble").length,
+    greet: Boolean(document.querySelector(".chat-greet")),
+    stored: sessionStorage.getItem("freezepoint.chat.v1"),
+  }));
+  assert.equal(wiped.bubbles, 0, "Start a new chat left messages on screen");
+  assert.equal(wiped.greet, true, "Start a new chat did not return to the greeting");
+  assert.ok(!wiped.stored || JSON.parse(wiped.stored).turns.length === 0, `the tab copy survived: ${wiped.stored?.slice(0, 60)}`);
+  ok("Start a new chat clears the panel and the tab copy, as the privacy dialog says");
+  await page.screenshot({ path: "artifacts/assistant-panel.png" });
 
   await page.setViewportSize({ width: 1456, height: 900 });
   await page.goto(baseURL, { waitUntil: "domcontentloaded" });

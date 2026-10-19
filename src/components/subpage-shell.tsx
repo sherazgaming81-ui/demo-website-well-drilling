@@ -20,7 +20,7 @@ export function SubpageHeader() {
         </Link>
         <nav className="sub-nav" aria-label="Site sections">
           <Link href="/areas" aria-current="page">Areas we cover</Link>
-          <Link href="/assistant">Ask the assistant</Link>
+          <Link href="/#services">Our services</Link>
         </nav>
         <div className="header-actions">
           <a className="header-phone" href={business.phoneHref}><Icon name="phone" size={16} /><span>{business.phoneDisplay}</span></a>
@@ -71,7 +71,7 @@ export function SubpageFooter() {
           <Link href="/areas">All areas we cover</Link>
           <Link href="/#services">Services</Link>
           <Link href="/#faq">Questions, answered</Link>
-          <Link href="/assistant">Chat with the assistant</Link>
+          <Link href="/#faq">How the visit works</Link>
         </div>
         <div className="footer-column footer-contact">
           <h3>LET’S TALK</h3>
