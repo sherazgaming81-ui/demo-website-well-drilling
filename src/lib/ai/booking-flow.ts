@@ -78,8 +78,8 @@ export function progressOf(session: FlowSession) {
  */
 /** The opening question, worded from the current service list. */
 function serviceQuestion(): string {
-  const labels = bookingServices.filter((option) => option.value !== "not-sure").map((option) => option.label.toLowerCase());
-  return `Which do you need — ${labels.slice(0, -1).join(", ")} or ${labels[labels.length - 1]}? If none of those fit, say so and we will work it out.`;
+  const list = bookingServices.map((option, index) => `${index + 1}. ${option.label.split(" — ")[0]}`);
+  return `Which do you need?\n${list.join("\n")}\nReply with the number or the name — if none of those fit, ${bookingServices.length} is fine and we will work it out with you.`;
 }
 
 function matchService(text: string): string | undefined {
@@ -88,6 +88,13 @@ function matchService(text: string): string | undefined {
 
   const exact = bookingServices.find((option) => t.includes(option.value) || t.includes(option.label.toLowerCase()));
   if (exact) return exact.value;
+
+  // A number is the shortest possible answer, and the list is shown numbered.
+  const choice = /^\s*(?:option|no\.?|sno\.?|choice)?\s*([1-9])\s*(?:st|nd|rd|th)?\s*$/.exec(t);
+  if (choice) {
+    const picked = bookingServices[Number(choice[1]) - 1];
+    if (picked) return picked.value;
+  }
   if (/\b(not sure|unsure|idk|no idea|advice|help me decide|what do you think|depends)\b/.test(t)) return "not-sure";
 
   // Score by how many meaningful words of each label the message contains.

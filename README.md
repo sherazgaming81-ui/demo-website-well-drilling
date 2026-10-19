@@ -49,8 +49,9 @@ Design and motion live in `src/app/globals.css`:
   visitor has earned it by using one), and deliberately **no** attachment or voice control — a
   paperclip that cannot receive a file is a dead end, which is the one thing this widget is not
   allowed to be
-- the booking flow asks **in words and nothing else**: no chip row and no progress bar, because a
-  visitor typing an answer is the same answer, and the stage it is on is said in the header line
+- the booking flow asks **in words and nothing else**: no chip row and no progress bar. The choice steps
+  are asked as a numbered list ("3. Gas charging or leak repair"), and replying `3` is as good as typing
+  the name; the stage it is on is said in the header line ("Step 2 of 10 · your area of the city")
 - the conversation is kept in `sessionStorage` (`freezepoint.chat.v1`) with its `sessionId`, so a
   reload offers the last message back on a *Recent message* card instead of dumping a half-finished
   booking on the floor. Nothing is sent by it, it dies with the tab, and `Start a new chat` clears

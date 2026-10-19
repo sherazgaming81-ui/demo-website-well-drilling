@@ -377,7 +377,14 @@ try {
   // Nothing is offered as a button during the booking any more, so every answer is
   // typed — which is also how a visitor on a phone will actually answer.
   await answer("I want to book an inspection");
-  await answer("inverter board fault");
+  // the choice step has no buttons now, so the question itself must carry the list,
+  // and the number has to be an acceptable answer
+  const serviceAsk = await page.evaluate(() => [...document.querySelectorAll(".chat-row-assistant .chat-bubble")].pop()?.innerText ?? "");
+  assert.match(serviceAsk, /1\. AC repair/, `the service step does not list its options: ${serviceAsk.slice(0, 90)}`);
+  assert.match(serviceAsk, /7\. Not sure yet/, "the not-sure option is not offered");
+  await answer("5");
+  const afterNumber = await page.evaluate(() => [...document.querySelectorAll(".chat-row-assistant .chat-bubble")].pop()?.innerText ?? "");
+  assert.match(afterNumber, /area/i, `answering "5" did not move the flow on — it said ${JSON.stringify(afterNumber.slice(0, 90))}`);
   await answer("12");
   assert.match(await page.getByRole("dialog", { name: /assistant/i }).innerText(), /your area/i, "an unusable area was accepted without a re-ask");
   await answer("Gulshan-e-Iqbal");
