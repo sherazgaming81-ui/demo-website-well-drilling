@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import { Analytics } from "@vercel/analytics/next";
 import { siteUrl } from "@/lib/site-url";
 import { jsonLd, localBusinessGraph } from "@/lib/schema";
 import "./globals.css";
@@ -57,7 +58,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         {/* Who and where: one LocalBusiness graph for the whole site, built from site-data. */}
         <script type="application/ld+json" dangerouslySetInnerHTML={jsonLd(localBusinessGraph())} />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* Vercel Web Analytics: counts page views server-side, no cookie banner needed. */}
+        <Analytics />
+      </body>
     </html>
   );
 }

@@ -169,6 +169,21 @@ const quietTags = "Service kal ho jayegi. \u{1F44D}\n[[BOOK]]";
 const qt = run(quietTags);
 check("a single well-behaved tag is left alone (whitespace aside)", norm(qt.shown) === norm(quietTags), JSON.stringify(qt.shown));
 
+  // Live, after the route learned to append the link: the model hid its second thoughts
+  // behind the word "service" ("no service tag needed"), which the AC exemption protects —
+  // so "tag" itself is the tell now.
+  const tagHide =
+    "WhatsApp link hai: https://wa.me/923005550142 Nahin, service nahin diya bas link diya. Tags: only. No service tag since the customer only asked for the link.";
+  const th = run(tagHide);
+  check("debate hiding behind the word 'service' is still cut", !/Nahin,|Tags:|only asked/i.test(th.shown) && th.shown.includes("https://wa.me/923005550142"), th.shown);
+  const tagMid =
+    "Yahan WhatsApp ka link hai: https://wa.me/923005550142 [[BOOK]] [[SERVICE:ac-repair]]? No — customer only asked for the link, no service tag is needed. But [[BOOK]] fits since it mentions the link.";
+  const tm = run(tagMid);
+  check("a 'No — customer only asked' tail is cut, answer once", (tm.shown.match(/wa\.me/g) ?? []).length === 1 && !/No —|needed|fits since/i.test(tm.shown), tm.shown);
+  check("…and the tags the widget reads survive", tm.shown.includes("[[BOOK]]"), tm.shown);
+  const tagAnswer = "Purani job card ko aap apne record ke liye rakh sakte hain, us par work ka poora detail likha hota hai.";
+  check("a real answer never cut just because the word could be a tag", !run(tagAnswer).changed, run(tagAnswer).shown);
+
 /* ── the other two rules the sanitiser exists for ────────────────────────── */
 
 const priced = run("General service Rs 5,000 mein ho jayega, aaj hi aa sakte hain.");
@@ -177,6 +192,26 @@ check("…and the cost rule replaces it", /free inspection/i.test(priced.shown),
 
 const greeted = run("Wa alaikum salam! (If you prefer English, let me know.)Wa alaikum salam! Bataein, AC mein kya masla hai?");
 check("a doubled greeting still collapses to one", (greeted.shown.match(/[Ww]a alaikum/g) ?? []).length === 1, greeted.shown);
+
+/* ── captures #8-#10: the model in a loop, re-starting itself, dying mid-sentence ── */
+
+// Live: the same answer restated three times, the phone number in every copy.
+const looped3 =
+  "WhatsApp number hai 0300 555 0142, isi par message karein. 👍\n\n[[BOOK]]0300 555 0142 par call ya WhatsApp karein, hum same-day visit ka slot check kar lenge. 👍\n\n[[BOOK]]0300 555 0142 par WhatsApp karein, hum aapka slot check kar lenge. 👍\n\n[[BOOK]]";
+const lp = run(looped3);
+check("a three-copy loop says the number once", (lp.shown.match(/0300 555 0142/g) ?? []).length === 1, lp.shown);
+check("…keeps the first copy and one tag", /WhatsApp number hai/.test(lp.shown) && (lp.shown.match(/\[\[BOOK\]\]/g) ?? []).length === 1, lp.shown);
+
+// Live: a re-start glued after the link with no punctuation between them.
+const restated = "WhatsApp link: https://wa.me/923005550142\n\n[[BOOK]]WhatsApp link";
+const rs = run(restated);
+check("a re-start glued after the link is not repeated", (rs.shown.match(/wa\.me/g) ?? []).length === 1 && !/0142WhatsApp/i.test(rs.shown) && !/\sWhatsApp link$/i.test(rs.shown), JSON.stringify(rs.shown));
+
+// Live, 2/2 identical: drafting in the middle, a monologue at the end.
+const cutOff =
+  "https://wa.me/923005550142\n\n[[BOOK]]? Actually, no tag needed since you just asked for the link. The link is above. 👍\n\nWait, I need to follow the rules. One message, no drafting. The link is sent. No tag needed. Done.https://wa.me/923005550142";
+const co = run(cutOff);
+check("mid-answer drafting cut, the link survives once", (co.shown.match(/wa\.me/g) ?? []).length === 1 && !/Wait|Actually|tag needed|no drafting/i.test(co.shown), JSON.stringify(co.shown));
 
 await rm(dir, { recursive: true, force: true });
 console.log(failures ? `\n${failures} check(s) failed` : "\nall sanitiser checks passed");

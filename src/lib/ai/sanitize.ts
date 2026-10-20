@@ -140,7 +140,11 @@ function dropStutteredGreeting(text: string): { text: string; hit: boolean } {
  */
 const FINAL_LABEL =
   /(?:^|(?<=[.!?\n]))[ \t]*(?:final|actual|revised|corrected)(?:[ \t]+(?:answer|reply|response|version|text))?[ \t]*:[ \t]*["'“”«»?]?[ \t]*/i;
-const HARD_TELL = /\[\[|\b(?:tokens?|sentinels?|emit|emits|emitted|emitting|plumbing|scratchpad|meta)\b/i;
+/* "tag" joins the hard tells deliberately: a customer answer about an air conditioner
+   never discusses a tag, while the model — once told to decide the marks silently —
+   keeps saying things like "no service tag needed", hiding behind the word "service"
+   that the AC exemption protects. */
+const HARD_TELL = /\[\[|\b(?:tokens?|sentinels?|emit|emits|emitted|emitting|plumbing|scratchpad|meta|tags?)\b|bas (?:link|number)\b/i;
 const SOFT_TELL_START = /^(?:\?[ \t]*)?(?:nahi|nahin|nhi|wait|hold on|oops|hmm+|actually|lekin|par|sorry|hmm|second thought|revised|revision|soch)\b/i;
 const SELF_INTENT = /\bi (?:should|shouldn'?t|must|need to|have to|will|won'?t|am going to|decided|thought|think|reckon|just)\b/i;
 /* Sentences the model only ever writes to itself about the plumbing. Every phrase here
@@ -234,13 +238,37 @@ function findRepeatCut(sentences: string[]): number {
   return -1;
 }
 
+/* "…https://wa.me/923005550142 Nahin, bas number diya." — the model glues a second
+   thought onto the end of the real answer with nothing between them, so a whole-sentence
+   rule never sees it. The seam: a capitalised debate interjection after a space, and
+   the tail that follows it reads as debate. A genuine mid-sentence "nahi bhej sakte"
+   is lower case, starts no clause after a full stop, and never matches. */
+const GLUED_INTERJECTION = /\s((?:Nahin|Nahi|No|Wait|Actually|Hmm|But|Lekin|Bas|So)[,.:—–]\s*)/;
+function trimGluedDebateTail(sentence: string): { text: string; hit: boolean } {
+  const match = GLUED_INTERJECTION.exec(sentence);
+  if (!match || match.index === undefined) return { text: sentence, hit: false };
+  const tail = sentence.slice(match.index + 1);
+  if (tail.length < 12 || !isModelDebate(tail)) return { text: sentence, hit: false };
+  return { text: `${sentence.slice(0, match.index).replace(/[,.\s:;]+$/, "")}.`, hit: true };
+}
+
 function cutDebateTail(text: string): { text: string; hit: boolean } {
   const tags = [...new Set(text.match(PAGE_TAG) ?? [])];
-  const body = tidy(text.replace(PAGE_TAG, ""));
+  const body = text.replace(PAGE_TAG, " ");
   // a line break is as good a sentence end as a full stop here: the model writes its
   // draft on the line after the answer, and a URL or an emoji has no punctuation to split on
-  const sentences = body.split(/(?:\n+|(?<=[.!?])\s+)/).filter(Boolean);
-  if (sentences.length < 2) return { text, hit: false };
+  const parts = body.split(/(?:\n+|(?<=[.!?])\s+)/).map((sentence) => tidy(sentence)).filter(Boolean);
+  let gluedAt = -1;
+  const sentences = parts.map((sentence, index) => {
+    const trim = trimGluedDebateTail(sentence);
+    if (trim.hit && gluedAt === -1) gluedAt = index;
+    return trim.text;
+  });
+  // a glued second thought is itself the cut signal: the trimmed sentence was the seam,
+  // so everything after it is draft. One sentence with a glued tail is still a trim.
+  const cutAt = gluedAt === -1 ? -1 : gluedAt + 1;
+  if (sentences.length < 2)
+    return cutAt === 1 && sentences[0] ? { text: sentences[0], hit: true } : { text, hit: false };
   let debateAt = -1;
   for (let index = 1; index < sentences.length; index++) {
     if (isModelDebate(sentences[index])) {
@@ -248,9 +276,23 @@ function cutDebateTail(text: string): { text: string; hit: boolean } {
       break;
     }
   }
+  // the degenerate loop this model falls into says the same phone/URL in every copy:
+  // the second sentence that carries the same digit run is not a second thought worth
+  // two bubbles of it — the first copy stays, the loop goes.
+  let echoAt = -1;
+  const digits = new Set<string>();
+  for (let index = 0; index < sentences.length; index++) {
+    // "0300 555 0142" and "0300-555-0142" are one number: compare digits, not glyphs
+    const runs = sentences[index].replace(/[\s.\-()]/g, "").match(/\d{7,}/g) ?? [];
+    if (runs.some((run) => digits.has(run))) {
+      echoAt = index;
+      break;
+    }
+    for (const run of runs) digits.add(run);
+  }
   const repeatAt = findRepeatCut(sentences);
-  const first = debateAt === -1 ? repeatAt : repeatAt === -1 ? debateAt : Math.min(debateAt, repeatAt);
-  if (first === -1) return { text, hit: false };
+  const first = Math.min(...[debateAt, repeatAt, cutAt, echoAt].filter((index) => index !== -1), sentences.length);
+  if (first >= sentences.length || first === -1) return { text, hit: false };
   const kept = tidy(sentences.slice(0, first).join(" "));
   const dropped = sentences.slice(first).join(" ").trim();
   // never trade an answer for a hole: the half that stays has to still be a sentence
@@ -376,6 +418,22 @@ function scrubPrices(text: string): { text: string; hit: boolean } {
    six SERVICE ids in a row. The widget reads one tag of each kind and the last match
    wins, so the flood can prefill a service the customer never mentioned. The first tag
    of each kind stays; later copies are the model hedging and go. */
+/* A stream that dies mid-sentence leaves a headline fragment: "…wa.me/923005550142
+   WhatsApp link" — the model re-starting itself and never getting there. If the last
+   capitalised clause carries no punctuation, is four words or fewer, and contains no
+   new information (every word already appeared above), it is the aborted draft, not
+   the end of an answer. */
+function trimTrailingFragment(text: string): { text: string; hit: boolean } {
+  const match = /\s([A-Z][^.!?]{2,34})$/.exec(text);
+  if (!match) return { text, hit: false };
+  const words = wordsOf(match[1]);
+  const rest = text.slice(0, text.length - match[0].length);
+  if (!words.length || words.length > 4 || rest.trim().length < 20) return { text, hit: false };
+  const lower = rest.toLowerCase();
+  if (words.some((word) => !lower.includes(word))) return { text, hit: false };
+  return { text: rest.replace(/[,;:\s]+$/, "").trim(), hit: true };
+}
+
 function dedupeMarks(text: string): { text: string; hit: boolean } {
   let hit = false;
   const seen = new Set<string>();
@@ -434,10 +492,12 @@ export function sanitizeAnswer(raw: string): Sanitized {
 
   const marks = dedupeMarks(scrubbed.text);
   if (marks.hit) violations.push("duplicate page tags dropped");
+  const trimmed = trimTrailingFragment(marks.text);
+  if (trimmed.hit) violations.push("trailing fragment removed");
 
   // a deleted price leaves a hole that needs the standard cost sentence; a reply that
   // was nothing but narration leaves nothing to answer with, and the caller says so
-  const cleaned = marks.text || (scrubbed.hit ? SAFE_COST_LINE : "");
+  const cleaned = trimmed.text || (scrubbed.hit ? SAFE_COST_LINE : "");
   return { text: cleaned, changed: cleaned !== raw.trim(), violations };
 }
 

@@ -22,4 +22,4 @@ export const siteUrl =
   normalise(process.env.NEXT_PUBLIC_SITE_URL) ??
   normalise(process.env.VERCEL_PROJECT_PRODUCTION_URL) ??
   normalise(process.env.VERCEL_URL) ??
-  "https://aquiferreachllc.vercel.app";
+  "https://freezepoints.vercel.app";

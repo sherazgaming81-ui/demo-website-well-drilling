@@ -274,6 +274,8 @@ export async function POST(request: NextRequest) {
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }
+  const lastTurn = history[history.length - 1];
+  const lastQuestion = lastTurn && lastTurn.role === "user" ? lastTurn.content : "";
 
   const attempts = resolveAttempts();
   if (attempts.length === 0) {
@@ -338,11 +340,16 @@ export async function POST(request: NextRequest) {
             // price, and narrating its reasoning. Stream first for speed, then replace
             // the bubble with a version that never shows a figure or a thought trail.
             const clean = sanitizeAnswer(streamed);
-            if (clean.changed) {
-              // Stripping a price or a thought trail can leave nothing behind, and the
-              // widget ignores an empty replace — which would leave the narration on
-              // screen. So when nothing honest remains, say so instead.
-              const shown = clean.text.trim().length >= 24 ? clean.text : UNSAID;
+            // Stripping a price or a thought trail can leave nothing behind, and the
+            // widget ignores an empty replace — which would leave the narration on
+            // screen. So when nothing honest remains, say so instead.
+            const body = clean.changed ? (clean.text.trim().length >= 24 ? clean.text : UNSAID) : streamed.trim();
+            // WhatsApp is this business's front door and the owner asked for its link
+            // twice. The model sometimes gives the number and forgets the link, so a
+            // question that asked for the link never depends on that mood: the route
+            // appends it, and the widget renders it as a clickable wa.me anchor.
+            const shown = body === UNSAID ? body : ensureWhatsAppLink(lastQuestion, body);
+            if (shown !== streamed.trim()) {
               streamController.enqueue(event({ type: "replace", text: shown }));
               console.warn(`[chat] sanitised ${attempt.model}: ${clean.violations.join(", ") || "formatting"}`);
             }
@@ -393,6 +400,19 @@ export async function POST(request: NextRequest) {
 /** When a reply turns out to be nothing but the model talking to itself, this is what
  *  the bubble says instead — short, Hinglish, honest about the failure. */
 const UNSAID = `Is baar jawab tayyar nahi ho saka — dobara poochein, ya office ko ${business.phoneDisplay} par call kar dein. Wahi details le kar aage badha denge.`;
+
+/**
+ * "WhatsApp link do" must return the link. The brief tells the model to; the route
+ * makes sure of it: a question that asks for the WhatsApp link or number, answered with
+ * prose that never contains one, gets the site's own wa.me address appended — one line
+ * of the business's real contact details, not a sentence invented for a customer.
+ */
+function ensureWhatsAppLink(question: string, answer: string): string {
+  if (!/\bwhatsapp\b/i.test(question)) return answer;
+  if (!/\b(?:link|links|address|adress|number|no)\b/i.test(question)) return answer;
+  if (/wa\.me/i.test(answer) || answer.trim().length < 24) return answer;
+  return `${answer.trim()} WhatsApp link: ${business.whatsappHref}`;
+}
 
 /** Short on purpose: the bubble offers a retry, so the sentence only has to say what
  *  happened and what to do instead. A wall of apology text is what made this look broken. */
